@@ -135,7 +135,7 @@ bool useBlur;
 bool useStretch;
 bool	init;	//Did the renderer initialise properly?
 bool isOriginal;
-bool isMucusDrawed;
+bool isMucusDrawed=true;
 //imGui相关参数
 bool subsurfaceScatteringEnabled = true;
 float sssWidth = 10.0f;
@@ -442,11 +442,11 @@ int main()
 	}
 	glfwMakeContextCurrent(window);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	glfwSetCursorPosCallback(window, mouse_callback);
+	//glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 
-	// tell GLFW to capture our mouse
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	// 是否捕获鼠标
+	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// glad: load all OpenGL function pointers
 	// ---------------------------------------
@@ -549,12 +549,15 @@ int main()
 		//设置gui图形界面
 		initImGUI();
 		
-
+		drawImGUI();
+		
 		//
 		//------------------------------------------------------渲染函数----------------------------------------------
 		RenderScene();
 		//
 		//-------------------------------------------------------------------------------------------------------------
+
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
@@ -573,6 +576,36 @@ int main()
 	glfwTerminate();
 	return 0;
 }
+void RenderScene()//---------------------------------------------------真实渲染场景，也就是渲染循环
+{
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	if (firstFrame)
+	{
+		computeBeckmannTex();//一开始计算beckman纹理
+		computeStretchMap();//这里计算拉伸矫正贴图
+
+		firstFrame = false;
+	}
+
+	shadowPass();
+	unwrapMesh();
+	blurPass();
+	mainPass();
+
+	//是否需要绘制黏液层
+	if (isMucusDrawed) {
+		drawMucusLayer();
+	}
+	// clean up
+	glUseProgram(0);
+
+	//是否绘制原来的模型，没有任何光照
+	if (!subsurfaceScatteringEnabled) {
+		drawOriginalModel();
+	}
+}
+
 void initImGUI() {
 	// Start the Dear ImGui frame 启动IMgui Frame框架.
 	ImGui_ImplOpenGL3_NewFrame();
@@ -583,6 +616,7 @@ void initImGUI() {
 	ImGui::Begin("Subsurface Scattering Demo");
 	ImGui::Checkbox("Subsurface Scattering", &subsurfaceScatteringEnabled);
 	ImGui::SliderFloat("Scattering Radius (mm)", &sssWidth, 1.0f, 40.0f);
+	ImGui::Checkbox("Mucus Layer", &isMucusDrawed);
 	ImGui::Checkbox("Temporal AA", &taaEnabled);
 	ImGui::SliderFloat("Light Angle", &lightTheta, 0.0f, 360.0f);
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -590,19 +624,20 @@ void initImGUI() {
 	ImGui::End();
 }
 void drawImGUI() {
+	ImGui::Render();
 	int display_w, display_h;
 	//glfwMakeContextCurrent(window);
 	glfwGetFramebufferSize(window, &display_w, &display_h);
 	glViewport(0, 0, display_w, display_h);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
-	ImGui::Render();
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	
+	
 }
 void drawOriginalModel() {
 	//
 		//------------------------------------------------------original---------------------------------------------------
-	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	//---------设置当前的着色器
 	SetCurrentShader(basicShader);//
@@ -978,38 +1013,7 @@ void UpdateShaderMatrices() {
 	currentShader->setMat4("textureMatrix", textureMatrix);
 }
 
-void RenderScene()//---------------------------------------------------真实渲染场景，也就是渲染循环
-{
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	if (firstFrame)
-	{
-		computeBeckmannTex();//一开始计算beckman纹理
-		computeStretchMap();//这里计算拉伸矫正贴图
-
-		firstFrame = false;
-	}
-
-	shadowPass();
-	unwrapMesh();
-	blurPass();
-
-	drawImGUI();
-
-	mainPass();
-
-	//是否需要绘制黏液层
-	if (isMucusDrawed) {
-		drawMucusLayer();
-	}
-	// clean up
-	glUseProgram(0);
-
-	//是否绘制原来的模型，没有任何光照
-	if (isOriginal) {
-		drawOriginalModel();
-	}
-}
 void shadowPass()
 {
 	//---------------------------------------------------------shadowPass();--------------------------------------
