@@ -1,0 +1,16 @@
+# Blender MTL File: 'None'
+# Material Count: 1
+# map_Bump normal.png
+# map_Kd livero2.png liver2.png baseColor.png liver1024_burn.png awesomeface.png  liver5.png livero.png
+# ../../texture/sss/pic5_1.png ../../texture/sss/head2
+newmtl LiverTex 
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.0 0.0 0.0
+Ni 1.450000
+d 1.000000
+illum 2
+map_Bump normal.png
+map_Kd ../../texture/sss/head3.png

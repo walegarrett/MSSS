@@ -1,0 +1,38 @@
+# 
+# Wavefront material file
+# Converted by the DEEP Exploration  Deep Exploration 6.5 x64 6.5.0.9182
+# Right Hemisphere, LTD
+# http://www.righthemisphere.com/
+# 
+
+newmtl Gallbladder
+Ka 0.588 0.588 0.588
+Kd 1 1 1
+Ks 1 1 1
+illum 2
+Ns 16
+map_Kd Gallbladder_Diffuse.png
+map_bump Gallbladder_Normal.png
+bump Gallbladder_Normal.png
+map_opacity 
+map_d 
+refl 
+map_kS Gallbladder_Specular.png
+map_kA 
+map_Ns 
+
+newmtl Liver
+Ka 0.588 0.588 0.588
+Kd 1 1 1
+Ks 1 1 1
+illum 2
+Ns 16
+map_Kd Liver_Diffuse.png
+map_bump Liver_Normal.png
+bump Liver_Normal.png
+map_opacity 
+map_d 
+refl 
+map_kS Liver_Specular.png
+map_kA 
+map_Ns 

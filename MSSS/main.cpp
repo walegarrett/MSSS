@@ -150,7 +150,7 @@ bool taaEnabled = true;
 float roughness = 0.85;
 float reflectivity = 0.158;
 bool isMouseMove = true;
-
+bool shadowDrawed = false;
 
 int modelType = ModelType::Lungs1;
 #pragma endregion
@@ -473,48 +473,11 @@ int main()
 	glEnable(GL_DEPTH_TEST);
 
 	// load models
-	// ---------------------------------LIVER---------------------------------------------
-	//headMesh=new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/liver.obj");//liver.obj
-	//mucusMesh=new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/liver1.obj");//Õ³Òº¸²¸Ç liver1.obj
-	//
+	
 	//-------------------------------LUNGS1------------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs1/lungs1.obj");//lungs1.obj
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs1/lungs1_1.obj");//Õ³Òº¸²¸Ç lungs1_1.obj
-	//
-	//-------------------------------LUNGS1------------------------------------------------
-	headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs3/lungs1.obj");//lungs1.obj
-	mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs3/lungs1_1.obj");//Õ³Òº¸²¸Ç lungs1_1.obj
-	//
-	//-------------------------------LUNGS2------------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs2/lungs2.obj");//
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs2/lungs2_1.obj");//
-	//
-	//-----------------------------------LIVER3----------------------------------
-	//liver3.obj"
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/livers/liver3/liver4.obj");//liver3.obj  liver4.obj
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/livers/liver3/liver4_1.obj");//liver3_1.obj liver4_1.obj
-	//
-	//-----------------------------heart------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/heart/heart.obj");//
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/heart/heart1.obj");//
-	//
-	//-----------------------------heart2------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart2/heart4.obj");//heart2.obj
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart2/heart4_1.obj");//heart2_1.obj
-	//
-	//-----------------------------spleen------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/spleen/spleen1/spleen4.obj");//
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/spleen/spleen1/spleen4_1.obj");//
-	//
-	//-----------------------------heart3------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart3/heart3_3.obj");//heart2.obj
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart3/heart3_4.obj");//heart2_1.obj
-
-
-	//-----------------------------heart3------------------------------------------
-	//headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart4/heart4_2.obj");//heart4.obj
-	//mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart4/heart4_3.obj");//heart4_1.obj
-	//
+	headMesh = new Model("resources/models/lungs/lungs1/lungs1.obj");//lungs1.obj
+	mucusMesh = new Model("resources/models/lungs/lungs1/lungs1_1.obj");//Õ³Òº¸²¸Ç lungs1_1.obj
+	
 	//-----------------------------------------------------------------------------------
 	// draw in wireframe-------------------------------------------Ïß¿òÄ£Ê½
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -597,22 +560,28 @@ void RenderScene()//---------------------------------------------------ÕæÊµäÖÈ¾³
 		firstFrame = false;
 	}
 
-	shadowPass();
+	if (shadowDrawed) {
+		shadowPass();
+	}
 	unwrapMesh();
 	blurPass();
-	mainPass();
+	
 
+	//ÊÇ·ñ¼ÓÉÏ´Î±íÃæÉ¢ÉäµÄÐ§¹û
+	if (!subsurfaceScatteringEnabled) {
+		drawOriginalModel();
+		// clean up
+		glUseProgram(0);
+	}else {
+		//»æÖÆSSS
+		mainPass();
+	}
 	//ÊÇ·ñÐèÒª»æÖÆð¤Òº²ã
 	if (isMucusDrawed) {
 		drawMucusLayer();
 	}
 	// clean up
 	glUseProgram(0);
-
-	//ÊÇ·ñ»æÖÆÔ­À´µÄÄ£ÐÍ£¬Ã»ÓÐÈÎºÎ¹âÕÕ
-	if (!subsurfaceScatteringEnabled) {
-		drawOriginalModel();
-	}
 }
 
 void initImGUI() {
@@ -632,39 +601,43 @@ void initImGUI() {
 	//¿ØÖÆ¸ß¹â
 	ImGui::SliderFloat("Roughness", &roughness, 0.00f, 1.00f);
 	ImGui::SliderFloat("Base Reflectivity", &reflectivity, 0.00f, 1.00f);
+	//ÊÇ·ñ»æÖÆÒõÓ°
+	ImGui::Checkbox("Shadow Map", &shadowDrawed);
 	//Ä£ÐÍµÄÑ¡Ôñ
 	if (ImGui::RadioButton("Lungs", true)) {
 		modelType = ModelType::Lungs1;
-		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs3/lungs1.obj");//lungs1.obj
-		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs3/lungs1_1.obj");//Õ³Òº¸²¸Ç lungs1_1.obj
-	}else if (ImGui::RadioButton("Liver1", true)) {
+		headMesh = new Model("resources/models/lungs/lungs1/lungs1.obj");//lungs1.obj
+		mucusMesh = new Model("resources/models/lungs/lungs1/lungs1_1.obj");//Õ³Òº¸²¸Ç lungs1_1.obj
+	}
+	else if (ImGui::RadioButton("Lungs2", true)) {
+		modelType = ModelType::Lungs2;
+		headMesh = new Model("resources/models/lungs/lungs2/lungs2.obj");//
+		mucusMesh = new Model("resources/models/lungs/lungs2/lungs2_1.obj");//
+	}
+	else if (ImGui::RadioButton("Liver1", true)) {
 		modelType = ModelType::Liver1;
-		headMesh=new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/liver.obj");//liver.obj
-		mucusMesh=new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/liver1.obj");//Õ³Òº¸²¸Ç liver1.obj
+		headMesh=new Model("resources/models/liver/liver.obj");//liver.obj
+		mucusMesh=new Model("resources/models/liver/liver1.obj");//Õ³Òº¸²¸Ç liver1.obj
 	}
 	else if (ImGui::RadioButton("Liver3", true)) {
 		modelType = ModelType::Liver3;
-		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/livers/liver3/liver4.obj");//liver3.obj  liver4.obj
-		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/livers/liver3/liver4_1.obj");//liver3_1.obj liver4_1.obj
+		headMesh = new Model("resources/models/livers/liver3/liver4.obj");//liver3.obj  liver4.obj
+		mucusMesh = new Model("resources/models/livers/liver3/liver4_1.obj");//liver3_1.obj liver4_1.obj
 	}
 	else if (ImGui::RadioButton("Heart", true)) {
 		modelType = ModelType::Heart;
-		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/heart/heart.obj");//
-		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/heart/heart1.obj");//
+		headMesh = new Model("resources/models/heart/heart.obj");//
+		mucusMesh = new Model("resources/models/heart/heart1.obj");//
 	}
 	else if (ImGui::RadioButton("Heart2", true)) {
 		modelType = ModelType::Heart2;
-		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart2/heart4.obj");//heart2.obj
-		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart2/heart4_1.obj");//heart2_1.obj
+		headMesh = new Model("resources/models/hearts/heart2/heart4.obj");//heart2.obj
+		mucusMesh = new Model("resources/models/hearts/heart2/heart4_1.obj");//heart2_1.obj
 	}
 	else if (ImGui::RadioButton("Spleen", true)) {
 		modelType = ModelType::Spleen;
-		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/spleen/spleen1/spleen4.obj");//
-		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/spleen/spleen1/spleen4_1.obj");//
-	}else if (ImGui::RadioButton("Lungs2", true)) {
-		modelType = ModelType::Lungs2;
-		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs2/lungs2.obj");//
-		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs2/lungs2_1.obj");//
+		headMesh = new Model("resources/models/spleen/spleen1/spleen4.obj");//
+		mucusMesh = new Model("resources/models/spleen/spleen1/spleen4_1.obj");//
 	}
 
 	//µ¼³öäÖÈ¾Í¼Æ¬
@@ -718,11 +691,15 @@ void drawOriginalModel() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	//---------ÉèÖÃµ±Ç°µÄ×ÅÉ«Æ÷
 	SetCurrentShader(basicShader);//
+	if (true) {//!shadowDrawed
+		projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);//----------NOT-----------
+		viewMatrix = camera.GetViewMatrix();
+		modelMatrix = mat4(1.0f);
+	}
+	
 	UpdateShaderMatrices();
 	//äÖÈ¾Ä£ÐÍ
 	drawModel(headMesh);
-	//
-	//--------------------------------------------------------------------------------------------------------------------------
 }
 void drawMucusLayer() {
 	//---------------------------------------------ÐÂÔö---------------------------------
@@ -736,81 +713,54 @@ void drawMucusLayer() {
 	currentShader->setVec3("lightPosition", lightPos);
 	glm::vec3 lightColor(3.0f, 3.0f, 3.0f);
 	currentShader->setVec3("lightColor", lightColor);//¹âÕÕÑÕÉ«
+
+	if (true) {//!shadowDrawed
+		projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);//----------NOT-----------
+		viewMatrix = camera.GetViewMatrix();
+		modelMatrix = mat4(1.0f);
+	}
+	
 	UpdateShaderMatrices();
 	drawModel(mucusMesh);
-	//
-	//--------------------------------------------------------------
 }
 void computeBeckmannTex()
 {
-	//--------------------------------------------------------------computeBeckmannTex()---------------------------
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	if (firstFrame) {
-		glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
-		glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//´¿ºÚ
-		glClear(GL_COLOR_BUFFER_BIT);
-		//shader
-		SetCurrentShader(beckmannShader);//--------------------not-----------------------
-		// matrices
-		projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
-		viewMatrix = mat4(1.0f);
-		modelMatrix = mat4(1.0f);
-		UpdateShaderMatrices();
-		// draw call
-		renderQuad();
-		// clean up
-		glUseProgram(0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glViewport(0.0f, 0.0f, (float)width, (float)height);
-
-		//-------------------------------------------------------------computeStretchMap();---------------------------------
-		// set up
-		glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
-		glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		// shader
-		SetCurrentShader(stretchShader);
-		// matrices---------------------------------------not---------------------------
-		projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
-		//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
-		viewMatrix = camera.GetViewMatrix();
-		//viewMatrix = camera->BuildViewMatrix();---------------------not------------------
-		modelMatrix = mat4(1.0f);
-		UpdateShaderMatrices();
-		// draw calls
-		drawModel(headMesh);
-		// clean up
-		glUseProgram(0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glViewport(0.0f, 0.0f, (float)width, (float)height);
-		//computeStretchMap();
-		firstFrame = false;
-	}
+	glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
+	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//´¿ºÚ
+	glClear(GL_COLOR_BUFFER_BIT);
+	//shader
+	SetCurrentShader(beckmannShader);//--------------------not-----------------------
+	// matrices
+	projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
+	viewMatrix = mat4(1.0f);
+	modelMatrix = mat4(1.0f);
+	UpdateShaderMatrices();
+	// draw call
+	renderQuad();
+	// clean up
+	glUseProgram(0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0.0f, 0.0f, (float)width, (float)height);
 }
-void computeStretchMap()
-{
-	// set up
+void computeStretchMap(){
+	//-------------------------------------------------------------computeStretchMap();---------------------------------
+			// set up
 	glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
 	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
 	// shader
 	SetCurrentShader(stretchShader);
-
-	// matrices--------------------------------not------------------------------------------
+	// matrices---------------------------------------not---------------------------
 	projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
 	//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
-	viewMatrix = camera.GetViewMatrix();//--------------------------NOT------------------
-
+	viewMatrix = camera.GetViewMatrix();
+	//viewMatrix = camera->BuildViewMatrix();---------------------not------------------
 	modelMatrix = mat4(1.0f);
 	UpdateShaderMatrices();
-
 	// draw calls
-	drawModel();
-
+	drawModel(headMesh);
 	// clean up
 	glUseProgram(0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -855,53 +805,16 @@ void drawModel(Model* headMesh)
 	
 	//----------------------------------------HAND----------------------------------------------------
 	//×¢ÒâÕâÀïµÄË³ÐòÊÇÏÈÎ»ÒÆÔÙËõ·Å×îºóÔÙÐý×ª¡£
-	//modelMatrix = glm::mat4(1.0f);
-	//modelMatrix = glm::rotate(modelMatrix, 45.0f, glm::vec3(1.0f, 0.0f, 0.0f));//Ðý×ª45¶È£¬×¢Òâ¶ÈÊý±ØÐëÊÇ¸¡µãÊýµÄÐÎÊ½
-	//modelMatrix = glm::scale(modelMatrix, glm::vec3(4.0f, 4.0f, 4.0f));
-	//modelMatrix = glm::translate(modelMatrix, glm::vec3(0.78f, -1.2f, -0.0f)); 
-
-	//------------------------------------liver---------------------------------------------------
-	/*modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
-	modelMatrix = glm::scale(modelMatrix, glm::vec3(0.004f, 0.004f, 0.004f));*/
-	//-----------------------------------live3----------------------------------
-	/*modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
-	modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f, 0.01f, 0.01f));*/
-	//-----------------------------------------head----------------------------------------------------
-	/*modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.5f, 0.0f, 0.0f));
-	modelMatrix = glm::scale(modelMatrix, glm::vec3(1.5f, 1.5f, 1.5f));*/
-	//-----------------------------------------lungs1---------------------------------------------------
 	modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));
-	modelMatrix = glm::scale(modelMatrix, glm::vec3(1.4f, 1.4f, 1.4f));
-	//-----------------------------------heart2----------------------------------
-	//modelMatrix = glm::mat4(1.0f);
-	//modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));//0.3 0.1
-	//modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));
-	//-----------------------------------heart----------------------------------
-	/*modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -1.75f, 0.0f));
-	modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));*/
-	//-----------------------------------spleen----------------------------------
-	/*modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
-	modelMatrix = glm::scale(modelMatrix, glm::vec3(0.005f, 0.005f, 0.005f));*/
-	//-----------------------------------heart3----------------------------------
-	//modelMatrix = glm::mat4(1.0f);
-	//modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));//0.3 0.1
-	//modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));//0.003
-	//-----------------------------------heart4----------------------------------
-	//modelMatrix = glm::mat4(1.0f);
-	//modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));//0.3 0.1
-	//modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));//0.003
+	modelMatrix = glm::rotate(modelMatrix, 45.0f, glm::vec3(1.0f, 0.0f, 0.0f));//Ðý×ª45¶È£¬×¢Òâ¶ÈÊý±ØÐëÊÇ¸¡µãÊýµÄÐÎÊ½
+	modelMatrix = glm::scale(modelMatrix, glm::vec3(4.0f, 4.0f, 4.0f));
+	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.78f, -1.2f, -0.0f)); 
 
 	//¸ù¾ÝÄ£ÐÍÀàÐÍÉèÖÃÄ£ÐÍ¾ØÕó
 	if (modelType == ModelType::Liver1) {
 		modelMatrix = glm::mat4(1.0f);
 		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.002f, 0.002f, 0.002f));
 	}
 	else if (modelType == ModelType::Liver3) {
 		modelMatrix = glm::mat4(1.0f);
@@ -915,23 +828,23 @@ void drawModel(Model* headMesh)
 	}
 	else if (modelType == ModelType::Lungs2) {
 		modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(1.4f, 1.4f, 1.4f));
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.0f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));
 	}
 	else if (modelType == ModelType::Spleen) {
 		modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.005f, 0.005f, 0.005f));
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.0f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f, 0.01f, 0.01f));
 	}
 	else if (modelType == ModelType::Heart) {
 		modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -1.75f, 0.0f));
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f, 0.01f, 0.01f));
 	}
 	else if (modelType == ModelType::Heart2) {
 		modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));//0.3 0.1
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));//0.003
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.0f, 0.0f));//0.3 0.1
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));//0.003
 	}
 	
 
@@ -1004,8 +917,7 @@ void processInput(GLFWwindow *window)
 
 			// ÊÇ·ñ²¶»ñÊó±ê
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-		}
-		else {
+		}else {
 			glfwSetCursorPosCallback(window, NULL);
 			glfwSetScrollCallback(window, scroll_callback);
 			// ÊÇ·ñ²¶»ñÊó±ê

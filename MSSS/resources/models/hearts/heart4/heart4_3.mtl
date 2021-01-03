@@ -1,0 +1,14 @@
+# Blender MTL File: 'None'
+# Material Count: 1
+# pic2_1.png pic5_2.png pic6_4.png
+newmtl wire_134006006
+Ns 31.999996
+Ka 1.000000 1.000000 1.000000
+Kd 0.525500 0.023500 0.023500
+Ks 0.350000 0.350000 0.350000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd ../../../texture/sss/head4_1.png
+map_Bump HeartBump.jpg

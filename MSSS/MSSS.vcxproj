@@ -143,6 +143,25 @@
     <None Include="FreeImage.dll" />
     <None Include="glaux.dll" />
     <None Include="glew32.dll" />
+    <None Include="Shaders\basicFrag.glsl" />
+    <None Include="Shaders\basicVert.glsl" />
+    <None Include="Shaders\beckmannFrag.glsl" />
+    <None Include="Shaders\beckmannVert.glsl" />
+    <None Include="Shaders\blurFrag.glsl" />
+    <None Include="Shaders\blurVert.glsl" />
+    <None Include="Shaders\heart4.vs" />
+    <None Include="Shaders\lightFrag.glsl" />
+    <None Include="Shaders\lightVert.glsl" />
+    <None Include="Shaders\mainFrag.glsl" />
+    <None Include="Shaders\mainVert.glsl" />
+    <None Include="Shaders\mucusFrag.glsl" />
+    <None Include="Shaders\mucusVert.glsl" />
+    <None Include="Shaders\shadowFrag.glsl" />
+    <None Include="Shaders\shadowVert.glsl" />
+    <None Include="Shaders\stretchFrag.glsl" />
+    <None Include="Shaders\stretchVert.glsl" />
+    <None Include="Shaders\unwrapFrag.glsl" />
+    <None Include="Shaders\unwrapVert.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="assimp-vc140-mt.lib" />
