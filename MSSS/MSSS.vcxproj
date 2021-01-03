@@ -156,6 +156,10 @@
     <None Include="Shaders\mainVert.glsl" />
     <None Include="Shaders\mucusFrag.glsl" />
     <None Include="Shaders\mucusVert.glsl" />
+    <None Include="Shaders\noSSSFrag.glsl" />
+    <None Include="Shaders\noSSSVert.glsl" />
+    <None Include="Shaders\pbrFrag.glsl" />
+    <None Include="Shaders\pbrVert.glsl" />
     <None Include="Shaders\shadowFrag.glsl" />
     <None Include="Shaders\shadowVert.glsl" />
     <None Include="Shaders\stretchFrag.glsl" />

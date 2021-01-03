@@ -151,7 +151,6 @@ float roughness = 0.85;
 float reflectivity = 0.158;
 bool isMouseMove = true;
 bool shadowDrawed = false;
-
 int modelType = ModelType::Lungs1;
 #pragma endregion
 // load textures
@@ -159,7 +158,7 @@ int modelType = ModelType::Lungs1;
 unsigned int rouTexture;//--------------------------
 #pragma region light
 // light position光照位置2.0099986f, 0.0f, 2.6999984f右前方
-vec3 lightPos = vec3(2.0099986f, 0.0f, 2.6999984f);
+vec3 lightPos = vec3(2.0099986f, 2.0f, 2.6999984f);
 float lightRadius = 10.0f;
 // light target光照目标方向以及颜色
 vec3 lightTarget = vec3(0.0f, 0.0f, 0.0f);
@@ -287,7 +286,9 @@ void preSetShaders() {
 	//build and compile shaders
 	//----------------------------------------------------------------------------------------
 	// -----------------------------------------basic
-	basicShader = new Shader("Shaders/basicVert.glsl", "Shaders/basicFrag.glsl");
+	//basicShader = new Shader("Shaders/basicVert.glsl", "Shaders/basicFrag.glsl");
+	basicShader = new Shader("Shaders/pbrVert.glsl", "Shaders/pbrFrag.glsl");
+	//basicShader = new Shader("Shaders/noSSSVert.glsl", "Shaders/noSSSFrag.glsl");
 	//------------------------------------------beckmann
 	beckmannShader = new Shader("Shaders/beckmannVert.glsl", "Shaders/beckmannFrag.glsl");
 	//-------------------------------------------shadow
@@ -597,6 +598,9 @@ void initImGUI() {
 	ImGui::SliderFloat("Forward Scattering Mix", &forwardScatteringFactor, 0.00f, 1.00f);
 	ImGui::SliderFloat("Backward Scattering Mix", &backwardScatteringFactor, 0.00f, 1.00f);
 	//渲染黏液层
+	ImGui::Checkbox("Blur Drawed", &useBlur);
+
+	//渲染黏液层
 	ImGui::Checkbox("Mucus Layer", &isMucusDrawed);
 	//控制高光
 	ImGui::SliderFloat("Roughness", &roughness, 0.00f, 1.00f);
@@ -643,13 +647,16 @@ void initImGUI() {
 	//导出渲染图片
 	if (ImGui::Button("save Rendering Result Image")) {
 		string fileName = headMesh->getFileName();
+		fileName = fileName.substr(0, fileName.find_first_of('.'));
 		if (subsurfaceScatteringEnabled) {
 			fileName += "-sss";
-		}
-		else fileName += "-original";
+		}else fileName += "-original";
 		if (isMucusDrawed) {
 			fileName += "-mucus";
 		}else fileName += "-noMucus";
+		if (useBlur) {
+			fileName += "-useBlur";
+		}else fileName += "-noBlur";
 		std::ostringstream ss;
 		ss << forwardScatteringFactor;
 		fileName += "-forward_";
@@ -691,12 +698,22 @@ void drawOriginalModel() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	//---------设置当前的着色器
 	SetCurrentShader(basicShader);//
+
 	if (true) {//!shadowDrawed
 		projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);//----------NOT-----------
 		viewMatrix = camera.GetViewMatrix();
 		modelMatrix = mat4(1.0f);
 	}
-	
+	SetShaderLight();
+	/*设置光照*/
+	currentShader->setVec3("albedo", 0.5f, 0.5f, 0.5f);
+	currentShader->setFloat("ao", 1.0f);
+	currentShader->setFloat("metallic", 5.5);//0.05
+	currentShader->setFloat("roughness", 0.5);//0.05
+
+	currentShader->setVec3("camPos", camera.Position);
+	currentShader->setVec3("cameraPos", camera.Position);
+
 	UpdateShaderMatrices();
 	//渲染模型
 	drawModel(headMesh);

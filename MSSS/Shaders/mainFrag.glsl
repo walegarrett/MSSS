@@ -135,11 +135,11 @@ void main(void) {
 	// calculate specular lighting------------------------------------使用KSK模型计算高光
 	float specular = specularKSK(beckmannTex, normal, lightVector, viewVector, m);
 
-	// Determine skin color from a diffuseColor map---------------------------------利用漫反射贴图决定皮肤的颜色
-	fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) + vec3(specular), 1.0 );
+	// Determine skin color from a diffuseColor map----------利用漫反射贴图决定皮肤的颜色---* lambert可以去除
+	fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) + vec3(specular), 1.0 );//fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) * lambert + vec3(specular), 1.0 );
 	//fragColor = vec4( vec3(diffuseLight * diffuse.rgb), 1.0 );
 	//fragColor = vec4( diffuseLight, 1.0 );
-		
+
 	//fragColor = texture(bluredTex1, IN.texCoord) * pow(diffuse, vec4(1.0 - mix));
 	//fragColor = vec4(texture(bluredTex1, IN.texCoord).rgb * diffuse.rgb, diffuse.a);
 	//fragColor.rgb += sFactor * 0.33;
@@ -147,7 +147,7 @@ void main(void) {
 //-----------------------------------------------------------
 
 	if (!useBlur) {
-		fragColor = diffuse * lambert;
+		fragColor = diffuse + vec4(specular);//fragColor = diffuse * lambert+ vec4(specular);
 		fragColor.a = 1.0f;
 	}
 }

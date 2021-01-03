@@ -65,6 +65,10 @@
     <None Include="Shaders\stretchVert.glsl" />
     <None Include="Shaders\unwrapFrag.glsl" />
     <None Include="Shaders\unwrapVert.glsl" />
+    <None Include="Shaders\pbrFrag.glsl" />
+    <None Include="Shaders\pbrVert.glsl" />
+    <None Include="Shaders\noSSSFrag.glsl" />
+    <None Include="Shaders\noSSSVert.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="assimp-vc140-mt.lib" />
