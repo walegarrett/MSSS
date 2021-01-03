@@ -9,6 +9,7 @@
 #include <iostream>
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_opengl3.h"
 using namespace glm;
 //‘§∂®“Â
 #define ZNEAR		0.1f
@@ -48,7 +49,11 @@ void renderQuad();
 void SetShaderLight();
 void drawOriginalModel();
 void drawMucusLayer();
+void drawImGUI();
+void initImGUI();
 #pragma endregion
+GLFWwindow* window;
+
 #pragma region matrixs
 //“ª–©æÿ’Û
 mat4 projMatrix;		//Projection matrix
@@ -131,6 +136,11 @@ bool useStretch;
 bool	init;	//Did the renderer initialise properly?
 bool isOriginal;
 bool isMucusDrawed;
+//imGuiœ‡πÿ≤Œ ˝
+bool subsurfaceScatteringEnabled = true;
+float sssWidth = 10.0f;
+bool taaEnabled = true;
+float lightTheta = 60.0f;
 #pragma endregion
 // load textures
 // -------------
@@ -423,7 +433,7 @@ int main()
 
 	// glfw window creation
 	// --------------------
-	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "SSS", NULL, NULL);
+	window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "SSS", NULL, NULL);
 	if (window == NULL)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
@@ -502,14 +512,20 @@ int main()
 	glfwSwapInterval(1); // Enable vsync
 
 
-	// …Ë÷√ImGui…‡œ¬Œƒ.
+	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	//…Ë÷√—’…´∑Á∏Ò
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
-	// Setup Platform/Renderer bindings
+	//ImGui::StyleColorsClassic();
+
+	// Setup Platform/Renderer backends
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 150");
 	
 	// render loop
 	// -----------
@@ -518,10 +534,7 @@ int main()
 	preSetShaders();
 	rouTexture = loadTexture("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/Roughness.png");
 
-	bool subsurfaceScatteringEnabled = true;
-	float sssWidth = 10.0f;
-	bool taaEnabled = true;
-	float lightTheta = 60.0f;
+
 	//-------------------------------------------------------------------------------------------
 	while (!glfwWindowShouldClose(window))
 	{
@@ -533,286 +546,58 @@ int main()
 		// input
 		processInput(window);
 
-		// Start the Dear ImGui frame ∆Ù∂ØIMgui FrameøÚº‹.
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		// gui window
-		ImGui::Begin("Subsurface Scattering Demo");
-		ImGui::Checkbox("Subsurface Scattering", &subsurfaceScatteringEnabled);
-		ImGui::SliderFloat("Scattering Radius (mm)", &sssWidth, 1.0f, 40.0f);
-		ImGui::Checkbox("Temporal AA", &taaEnabled);
-		ImGui::SliderFloat("Light Angle", &lightTheta, 0.0f, 360.0f);
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::Text("Subsurface Scattering Time %.3f ms", 20.0);
-		ImGui::End();
-
-		ImGui::Render();
-		//
-		//----------------------------------------------------------- µœ÷æﬂÃÂµƒ¥˙¬Î-----------------------------------------------
-		//-----------------------------------------------------------------------------------------------------------------------------
-		//
+		//…Ë÷√guiÕº–ŒΩÁ√Ê
+		initImGUI();
+		
 
 		//
 		//------------------------------------------------------‰÷»æ∫Ø ˝----------------------------------------------
-		//RenderScene();
+		RenderScene();
 		//
 		//-------------------------------------------------------------------------------------------------------------
-#if 1
 
-#if 1
-
-		//--------------------------------------------------------------computeBeckmannTex()---------------------------
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		if (firstFrame) {
-			glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
-			glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//¥ø∫⁄
-			glClear(GL_COLOR_BUFFER_BIT);
-			//shader
-			SetCurrentShader(beckmannShader);//--------------------not-----------------------
-			// matrices
-			projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
-			viewMatrix = mat4(1.0f);
-			modelMatrix = mat4(1.0f);
-			UpdateShaderMatrices();
-			// draw call
-			renderQuad();
-			// clean up
-			glUseProgram(0);
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			glViewport(0.0f, 0.0f, (float)width, (float)height);
-
-			//-------------------------------------------------------------computeStretchMap();---------------------------------
-			// set up
-			glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
-			glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-			glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-			// shader
-			SetCurrentShader(stretchShader);
-			// matrices---------------------------------------not---------------------------
-			projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
-			//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
-			viewMatrix = camera.GetViewMatrix();
-			//viewMatrix = camera->BuildViewMatrix();---------------------not------------------
-			modelMatrix = mat4(1.0f);
-			UpdateShaderMatrices();
-			// draw calls
-			drawModel(headMesh);
-			// clean up
-			glUseProgram(0);
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			glViewport(0.0f, 0.0f, (float)width, (float)height);
-			//computeStretchMap();
-			firstFrame = false;
-		}
-#endif
-		//shadowPass();
-#if 1
-		//---------------------------------------------------------shadowPass();--------------------------------------
-		// set up
-		glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
-		glViewport(0, 0, MAP_SIZE, MAP_SIZE);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-		// shader
-		SetCurrentShader(shadowShader);
-
-		// matrices
-		//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);//fov±Ì æ ”≥°Ω«
-		//---------------------------NOT-----------------------------------------
-		projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);//----------not---------
-		//viewMatrix = Matrix4::BuildViewMatrix(light->GetPosition(), lightTarget);//-----------------
-		viewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
-		modelMatrix = mat4(1.0f);
-		//shadowMatrix = biasMatrix * (projMatrix * viewMatrix);
-		shadowMatrix = biasMatrix * (projMatrix * viewMatrix);//--------------------not---------------------
-		UpdateShaderMatrices();
-
-		// draw calls
-		drawModel(headMesh);
-
-		// clean up
-		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-		glViewport(0, 0, width, height);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glUseProgram(0);
-#endif
-		//unwrapMesh();
-#if 1
-		//----------------------------------------------------------unwrapMesh();----------------------------------------
-		// set up
-		glBindFramebuffer(GL_FRAMEBUFFER, unwrapFBO);
-		glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-		// shader
-		SetCurrentShader(unwrapShader);
-
-		// shader textures
-		//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "diffuseTex"), 0);
-		//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "bumpTex"), 1);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "shadowTex"), 2);
-
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, shadowTex);
-
-		// shader light variables---------------------------not---------------------------
-		SetShaderLight();
-		//glUniform3fv(glGetUniformLocation(currentShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());*/
-		currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//--------------------not----------------------
-		// matrices
-		//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
-
-		projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-		viewMatrix = camera.GetViewMatrix();
-		modelMatrix = mat4(1.0f);
-		UpdateShaderMatrices();
-
-		// draw calls
-		drawModel(headMesh);
-
-		// clean up
-		glUseProgram(0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glViewport(0.0f, 0.0f, (float)width, (float)height);
-#endif
-		//blurPass();
-#if 1
-		//-----------------------------------------------------------------blurPass()-------------------------------------------
-		// set up
-		glBindFramebuffer(GL_FRAMEBUFFER, blurFBO);
-
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//1.0f, 1.0f, 1.0f, 1.0f
-		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-
-		glDisable(GL_DEPTH_TEST);
-		glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-
-		// shader
-		SetCurrentShader(blurShader);
-
-		// shader textures
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "diffuseTex"), 0);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "stretchTex"), 2);
-
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, stretchColourTex);
-
-		// shader variables
-		glUniform2f(glGetUniformLocation(currentShader->GetProgram(), "pixelSize"), 1.0f / MAP_SIZE, 1.0f / MAP_SIZE);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "useStretch"), useStretch);
-
-		// matrices
-		modelMatrix = mat4(1.0f);
-		viewMatrix = mat4(1.0f);
-		projMatrix = ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
-		UpdateShaderMatrices();
-
-		// blur 1
-		uvPass(nonBlurredTexture, blurredTexture[0]);
-		// blur 2
-		uvPass(blurredTexture[0], blurredTexture[1]);
-		// blur 3
-		uvPass(blurredTexture[1], blurredTexture[2]);
-		// blur 4
-		uvPass(blurredTexture[2], blurredTexture[3]);
-		// blur 5
-		uvPass(blurredTexture[3], blurredTexture[4]);
-
-		// clean up
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glUseProgram(0);
-		glEnable(GL_DEPTH_TEST);
-		glViewport(0.0f, 0.0f, (float)width, (float)height);
-#endif
-		//mainPass();
-#if 1
-		//---------------------------------------------------------mainPass()-----------------------------------
-		// shader
-		SetCurrentShader(mainShader);
-
-		// shader textures
-		//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "diffuseTex"), 0);
-		//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "bumpTex"), 1);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "shadowTex"), 2);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "beckmannTex"), 3);
-
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex1"), 5);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex2"), 6);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex3"), 7);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex4"), 8);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex5"), 9);
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex6"), 10);
-
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, shadowTex);
-		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, beckmannTex);
-
-		glActiveTexture(GL_TEXTURE5);
-		glBindTexture(GL_TEXTURE_2D, nonBlurredTexture);
-		glActiveTexture(GL_TEXTURE6);
-		glBindTexture(GL_TEXTURE_2D, blurredTexture[0]);
-		glActiveTexture(GL_TEXTURE7);
-		glBindTexture(GL_TEXTURE_2D, blurredTexture[1]);
-		glActiveTexture(GL_TEXTURE8);
-		glBindTexture(GL_TEXTURE_2D, blurredTexture[2]);
-		glActiveTexture(GL_TEXTURE9);
-		glBindTexture(GL_TEXTURE_2D, blurredTexture[3]);
-		glActiveTexture(GL_TEXTURE10);
-		glBindTexture(GL_TEXTURE_2D, blurredTexture[4]);
-
-		// shader variables
-		//glUniform3fv(glGetUniformLocation(currentShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());
-		currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//------------not---------------
-		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "useBlur"), useBlur);
-
-		// shader light variables
-		SetShaderLight();//---------------------------not-----------------------------
-
-		// matrices
-		//projMatrix = perspective(ZNEAR, ZFAR, (float)width / (float)height, FOV);
-		//--------------------------------------------NOT------------------------------------------------
-		projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);//----------NOT-----------
-		viewMatrix = camera.GetViewMatrix();
-		modelMatrix = mat4(1.0f);
-		UpdateShaderMatrices();
-
-		// draw calls
-		drawModel(headMesh);//ªÊ÷∆‘≠¿¥µƒƒ£–Õ
-		//drawLight();
-
-		// «∑Ò–Ë“™ªÊ÷∆§“∫≤„
-		if (isMucusDrawed) {
-			drawMucusLayer();
-		}
-		// clean up
-		glUseProgram(0);
-#endif
-
-#if 1
-		// «∑ÒªÊ÷∆‘≠¿¥µƒƒ£–Õ£¨√ª”–»Œ∫Œπ‚’’
-		if (isOriginal) {
-			drawOriginalModel();
-		}
-#endif
-
-#endif
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
+
+	// Cleanup
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
 	deleteAll();
 	// glfw: terminate, clearing all previously allocated GLFW resources.
 	// ------------------------------------------------------------------
 	glfwTerminate();
 	return 0;
+}
+void initImGUI() {
+	// Start the Dear ImGui frame ∆Ù∂ØIMgui FrameøÚº‹.
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	// gui window
+	ImGui::Begin("Subsurface Scattering Demo");
+	ImGui::Checkbox("Subsurface Scattering", &subsurfaceScatteringEnabled);
+	ImGui::SliderFloat("Scattering Radius (mm)", &sssWidth, 1.0f, 40.0f);
+	ImGui::Checkbox("Temporal AA", &taaEnabled);
+	ImGui::SliderFloat("Light Angle", &lightTheta, 0.0f, 360.0f);
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	ImGui::Text("Subsurface Scattering Time %.3f ms", 20.0);
+	ImGui::End();
+}
+void drawImGUI() {
+	int display_w, display_h;
+	//glfwMakeContextCurrent(window);
+	glfwGetFramebufferSize(window, &display_w, &display_h);
+	glViewport(0, 0, display_w, display_h);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 void drawOriginalModel() {
 	//
@@ -846,25 +631,51 @@ void drawMucusLayer() {
 }
 void computeBeckmannTex()
 {
-	// set up
-	glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
-	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//¥ø∫⁄
-	glClear(GL_COLOR_BUFFER_BIT);
-	//shader
-	SetCurrentShader(beckmannShader);//--------------------not-----------------------
-	// matrices
-	projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
-	viewMatrix = mat4(1.0f);
-	modelMatrix = mat4(1.0f);
-	UpdateShaderMatrices();
-	//--------------------------------------------¥À ±≤¢√ª”–∏¯Àƒ±ﬂ–Œ…Ë÷√Œ∆¿Ì£¨÷ª «µ•¥øµƒΩ´beckmannŒ∆¿Ì–¥»Îquad
-	// draw call
-	renderQuad();
-	// clean up
-	glUseProgram(0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0.0f, 0.0f, (float)width, (float)height);
+	//--------------------------------------------------------------computeBeckmannTex()---------------------------
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	if (firstFrame) {
+		glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
+		glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//¥ø∫⁄
+		glClear(GL_COLOR_BUFFER_BIT);
+		//shader
+		SetCurrentShader(beckmannShader);//--------------------not-----------------------
+		// matrices
+		projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
+		viewMatrix = mat4(1.0f);
+		modelMatrix = mat4(1.0f);
+		UpdateShaderMatrices();
+		// draw call
+		renderQuad();
+		// clean up
+		glUseProgram(0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0.0f, 0.0f, (float)width, (float)height);
+
+		//-------------------------------------------------------------computeStretchMap();---------------------------------
+		// set up
+		glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
+		glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		// shader
+		SetCurrentShader(stretchShader);
+		// matrices---------------------------------------not---------------------------
+		projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
+		//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
+		viewMatrix = camera.GetViewMatrix();
+		//viewMatrix = camera->BuildViewMatrix();---------------------not------------------
+		modelMatrix = mat4(1.0f);
+		UpdateShaderMatrices();
+		// draw calls
+		drawModel(headMesh);
+		// clean up
+		glUseProgram(0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0.0f, 0.0f, (float)width, (float)height);
+		//computeStretchMap();
+		firstFrame = false;
+	}
 }
 void computeStretchMap()
 {
@@ -1179,18 +990,30 @@ void RenderScene()//---------------------------------------------------’Ê µ‰÷»æ≥
 		firstFrame = false;
 	}
 
-	shadowPass();//-------------------------------------------------ªÊ÷∆“ı”∞Ã˘Õº
-	unwrapMesh();//-------------------------------------------------
-	blurPass();//-------------------------------------------------ƒ£∫˝≤ø∑÷
+	shadowPass();
+	unwrapMesh();
+	blurPass();
+
+	drawImGUI();
+
 	mainPass();
 
-	//GL_BREAKPOINT
-	//SwapBuffers();
-	//glUseProgram(0);
+	// «∑Ò–Ë“™ªÊ÷∆§“∫≤„
+	if (isMucusDrawed) {
+		drawMucusLayer();
+	}
+	// clean up
+	glUseProgram(0);
+
+	// «∑ÒªÊ÷∆‘≠¿¥µƒƒ£–Õ£¨√ª”–»Œ∫Œπ‚’’
+	if (isOriginal) {
+		drawOriginalModel();
+	}
 }
 void shadowPass()
 {
-	// set up
+	//---------------------------------------------------------shadowPass();--------------------------------------
+		// set up
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
 	glViewport(0, 0, MAP_SIZE, MAP_SIZE);
 	glClear(GL_DEPTH_BUFFER_BIT);
@@ -1206,11 +1029,12 @@ void shadowPass()
 	//viewMatrix = Matrix4::BuildViewMatrix(light->GetPosition(), lightTarget);//-----------------
 	viewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
 	modelMatrix = mat4(1.0f);
+	//shadowMatrix = biasMatrix * (projMatrix * viewMatrix);
 	shadowMatrix = biasMatrix * (projMatrix * viewMatrix);//--------------------not---------------------
 	UpdateShaderMatrices();
 
 	// draw calls
-	drawModel();
+	drawModel(headMesh);
 
 	// clean up
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -1221,7 +1045,8 @@ void shadowPass()
 
 void unwrapMesh()
 {
-	// set up
+	//----------------------------------------------------------unwrapMesh();----------------------------------------
+		// set up
 	glBindFramebuffer(GL_FRAMEBUFFER, unwrapFBO);
 	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1230,7 +1055,7 @@ void unwrapMesh()
 	// shader
 	SetCurrentShader(unwrapShader);
 
-	// shader textures-----------------------------NOT-------------------------------
+	// shader textures
 	//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "diffuseTex"), 0);
 	//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "bumpTex"), 1);
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "shadowTex"), 2);
@@ -1238,23 +1063,20 @@ void unwrapMesh()
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
 
-	// shader light variables
-	/*SetShaderLight(*light);
-	glUniform3fv(glGetUniformLocation(currentShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());*/
+	// shader light variables---------------------------not---------------------------
 	SetShaderLight();
+	//glUniform3fv(glGetUniformLocation(currentShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());*/
 	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//--------------------not----------------------
 	// matrices
-
 	//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
-	//---------------------------------------------not-------------------------------------------
-	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
+	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 	viewMatrix = camera.GetViewMatrix();
 	modelMatrix = mat4(1.0f);
 	UpdateShaderMatrices();
 
 	// draw calls
-	drawModel();
+	drawModel(headMesh);
 
 	// clean up
 	glUseProgram(0);
@@ -1336,10 +1158,11 @@ void uvPass(GLuint &sourceTex, GLuint &targetTex)
 //--------------------------------------------------------------------------------÷˜‰÷»æ≤ø∑÷
 void mainPass()
 {
-	// shader
+	//---------------------------------------------------------mainPass()-----------------------------------
+		// shader
 	SetCurrentShader(mainShader);
 
-	// shader textures------------------------------------NOT--------------------------------
+	// shader textures
 	//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "diffuseTex"), 0);
 	//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "bumpTex"), 1);
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "shadowTex"), 2);
@@ -1351,8 +1174,6 @@ void mainPass()
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex4"), 8);
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex5"), 9);
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex6"), 10);
-
-	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "roughness"), 11);//-------------
 
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -1372,30 +1193,25 @@ void mainPass()
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, blurredTexture[4]);
 
-	glActiveTexture(GL_TEXTURE11);
-	glBindTexture(GL_TEXTURE_2D, rouTexture);
-
 	// shader variables
 	//glUniform3fv(glGetUniformLocation(currentShader->GetProgram(), "cameraPos"), 1, (float*)&camera->GetPosition());
-	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//------------not-------------------
+	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//------------not---------------
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "useBlur"), useBlur);
 
 	// shader light variables
-	SetShaderLight();//---------------------------------not---------------------------
+	SetShaderLight();//---------------------------not-----------------------------
 
-	// matrices----------------------------------------------not------------------------------------------------
+	// matrices
 	//projMatrix = perspective(ZNEAR, ZFAR, (float)width / (float)height, FOV);
-	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+	//--------------------------------------------NOT------------------------------------------------
+	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);//----------NOT-----------
 	viewMatrix = camera.GetViewMatrix();
 	modelMatrix = mat4(1.0f);
 	UpdateShaderMatrices();
 
 	// draw calls
-	drawModel();
+	drawModel(headMesh);//ªÊ÷∆‘≠¿¥µƒƒ£–Õ
 	//drawLight();
-
-	// clean up
-	glUseProgram(0);
 }
 // renderQuad() renders a 1x1 XY quad in NDC
 // -----------------------------------------
