@@ -26,8 +26,9 @@ uniform bool useTexture;
 uniform bool useLighting;
 uniform vec4 colour;
 
-const float m = 0.85;//0.3 m=0.7 f=0.158(无高光),m=0.9 f=0.458,m=0.95 f=0.658,
-const float mix = 0.6;//0.5
+uniform float m;// = 0.85;//0.3 m=0.7 f=0.158(无高光),m=0.9 f=0.458,m=0.95 f=0.658,
+uniform float reflectivity;//0.158
+uniform float mix;// = 0.6;//0.5
 
 uniform bool useBlur;
 
@@ -68,7 +69,7 @@ float specularKSK(sampler2D beckmannTex, vec3 normal, vec3 lightVector, vec3 vie
     float NdotH = max(0.0, dot(normal, halfVectorN));
 
     float ph = pow( texture(beckmannTex, vec2(NdotH, roughness)).r * 2.0, 10.0 );
-    float f = fresnel(halfVectorN, viewVector, 0.158);//调节数值越高高光效果越明显0.028 0.128 0.158
+    float f = fresnel(halfVectorN, viewVector, reflectivity);//调节数值越高高光效果越明显0.028 0.128 0.158
     float ksk = max(0.0, ph * f / dot(halfVector, halfVector));
 
     return NdotL * ksk;   

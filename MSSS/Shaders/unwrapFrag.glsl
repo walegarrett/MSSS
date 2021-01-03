@@ -9,7 +9,7 @@ uniform float lightRadius;
 
 uniform vec3 cameraPos;
 
-float mix = 0.4;//0.4
+uniform float mix;// = 0.4;//0.4
 
 in Vertex {
 	vec2 texCoord;

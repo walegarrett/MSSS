@@ -10,6 +10,7 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
+#include<FreeImage.h>
 using namespace glm;
 //预定义
 #define ZNEAR		0.1f
@@ -51,9 +52,14 @@ void drawOriginalModel();
 void drawMucusLayer();
 void drawImGUI();
 void initImGUI();
+void exportRenderingResultImage(const char * fileName);
 #pragma endregion
 GLFWwindow* window;
-
+//模型的类型
+enum ModelType
+{
+	Lungs1, Lungs2, Liver1, Liver3, Heart, Heart2, Spleen
+};
 #pragma region matrixs
 //一些矩阵
 mat4 projMatrix;		//Projection matrix
@@ -74,8 +80,8 @@ mat4 biasMatrix = mat4(1.0f);//-----------------------------------not-----------
 // settings
 const unsigned int SCR_WIDTH = 1800;//1800
 const unsigned int SCR_HEIGHT = 900;//900
-int		width = 1900;			//Render area width (not quite the same as window width)
-int		height = 1024;			//Render area height (not quite the same as window height)
+int		width = 1800;			//Render area width (not quite the same as window width)1900
+int		height = 900;			//Render area height (not quite the same as window height)1024
 #pragma endregion
 // camera
 //Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -138,9 +144,15 @@ bool isOriginal;
 bool isMucusDrawed=true;
 //imGui相关参数
 bool subsurfaceScatteringEnabled = true;
-float sssWidth = 10.0f;
+float forwardScatteringFactor = 0.4;
+float backwardScatteringFactor = 0.6;
 bool taaEnabled = true;
-float lightTheta = 60.0f;
+float roughness = 0.85;
+float reflectivity = 0.158;
+bool isMouseMove = true;
+
+
+int modelType = ModelType::Lungs1;
 #pragma endregion
 // load textures
 // -------------
@@ -442,11 +454,11 @@ int main()
 	}
 	glfwMakeContextCurrent(window);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	//glfwSetCursorPosCallback(window, mouse_callback);
+	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 
 	// 是否捕获鼠标
-	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// glad: load all OpenGL function pointers
 	// ---------------------------------------
@@ -565,10 +577,7 @@ int main()
 		glfwPollEvents();
 	}
 
-	// Cleanup
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+	
 
 	deleteAll();
 	// glfw: terminate, clearing all previously allocated GLFW resources.
@@ -614,11 +623,79 @@ void initImGUI() {
 
 	// gui window
 	ImGui::Begin("Subsurface Scattering Demo");
+	//控制散射
 	ImGui::Checkbox("Subsurface Scattering", &subsurfaceScatteringEnabled);
-	ImGui::SliderFloat("Scattering Radius (mm)", &sssWidth, 1.0f, 40.0f);
+	ImGui::SliderFloat("Forward Scattering Mix", &forwardScatteringFactor, 0.00f, 1.00f);
+	ImGui::SliderFloat("Backward Scattering Mix", &backwardScatteringFactor, 0.00f, 1.00f);
+	//渲染黏液层
 	ImGui::Checkbox("Mucus Layer", &isMucusDrawed);
-	ImGui::Checkbox("Temporal AA", &taaEnabled);
-	ImGui::SliderFloat("Light Angle", &lightTheta, 0.0f, 360.0f);
+	//控制高光
+	ImGui::SliderFloat("Roughness", &roughness, 0.00f, 1.00f);
+	ImGui::SliderFloat("Base Reflectivity", &reflectivity, 0.00f, 1.00f);
+	//模型的选择
+	if (ImGui::RadioButton("Lungs", true)) {
+		modelType = ModelType::Lungs1;
+		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs3/lungs1.obj");//lungs1.obj
+		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs3/lungs1_1.obj");//粘液覆盖 lungs1_1.obj
+	}else if (ImGui::RadioButton("Liver1", true)) {
+		modelType = ModelType::Liver1;
+		headMesh=new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/liver.obj");//liver.obj
+		mucusMesh=new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/liver/liver1.obj");//粘液覆盖 liver1.obj
+	}
+	else if (ImGui::RadioButton("Liver3", true)) {
+		modelType = ModelType::Liver3;
+		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/livers/liver3/liver4.obj");//liver3.obj  liver4.obj
+		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/livers/liver3/liver4_1.obj");//liver3_1.obj liver4_1.obj
+	}
+	else if (ImGui::RadioButton("Heart", true)) {
+		modelType = ModelType::Heart;
+		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/heart/heart.obj");//
+		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/heart/heart1.obj");//
+	}
+	else if (ImGui::RadioButton("Heart2", true)) {
+		modelType = ModelType::Heart2;
+		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart2/heart4.obj");//heart2.obj
+		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/hearts/heart2/heart4_1.obj");//heart2_1.obj
+	}
+	else if (ImGui::RadioButton("Spleen", true)) {
+		modelType = ModelType::Spleen;
+		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/spleen/spleen1/spleen4.obj");//
+		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/spleen/spleen1/spleen4_1.obj");//
+	}else if (ImGui::RadioButton("Lungs2", true)) {
+		modelType = ModelType::Lungs2;
+		headMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs2/lungs2.obj");//
+		mucusMesh = new Model("D:/visual studio 2017 codes/repos/OpenGL/OpenGL/resources/models/lungs/lungs2/lungs2_1.obj");//
+	}
+
+	//导出渲染图片
+	if (ImGui::Button("save Rendering Result Image")) {
+		string fileName = headMesh->getFileName();
+		if (subsurfaceScatteringEnabled) {
+			fileName += "-sss";
+		}
+		else fileName += "-original";
+		if (isMucusDrawed) {
+			fileName += "-mucus";
+		}else fileName += "-noMucus";
+		std::ostringstream ss;
+		ss << forwardScatteringFactor;
+		fileName += "-forward_";
+		fileName += ss.str(); ss.str("");
+		fileName += "-backward_";
+		ss << backwardScatteringFactor;
+		fileName += ss.str(); ss.str("");
+		ss << roughness;
+		fileName += "-roughness_";
+		fileName += ss.str(); ss.str("");
+		ss << reflectivity;
+		fileName += "-reflectivity_";
+		fileName += ss.str(); ss.str("");
+		fileName += ".png";
+		exportRenderingResultImage(fileName.c_str());
+	}
+	//修改物体的位置
+	
+
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::Text("Subsurface Scattering Time %.3f ms", 20.0);
 	ImGui::End();
@@ -775,6 +852,7 @@ void drawModel()
 }
 void drawModel(Model* headMesh)
 {
+	
 	//----------------------------------------HAND----------------------------------------------------
 	//注意这里的顺序是先位移再缩放最后再旋转。
 	//modelMatrix = glm::mat4(1.0f);
@@ -796,7 +874,7 @@ void drawModel(Model* headMesh)
 	modelMatrix = glm::scale(modelMatrix, glm::vec3(1.5f, 1.5f, 1.5f));*/
 	//-----------------------------------------lungs1---------------------------------------------------
 	modelMatrix = glm::mat4(1.0f);
-	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
+	modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));
 	modelMatrix = glm::scale(modelMatrix, glm::vec3(1.4f, 1.4f, 1.4f));
 	//-----------------------------------heart2----------------------------------
 	//modelMatrix = glm::mat4(1.0f);
@@ -818,6 +896,44 @@ void drawModel(Model* headMesh)
 	//modelMatrix = glm::mat4(1.0f);
 	//modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));//0.3 0.1
 	//modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));//0.003
+
+	//根据模型类型设置模型矩阵
+	if (modelType == ModelType::Liver1) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));
+	}
+	else if (modelType == ModelType::Liver3) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.01f, 0.01f, 0.01f));
+	}
+	else if (modelType == ModelType::Lungs1) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(1.4f, 1.4f, 1.4f));
+	}
+	else if (modelType == ModelType::Lungs2) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(1.4f, 1.4f, 1.4f));
+	}
+	else if (modelType == ModelType::Spleen) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.1f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.005f, 0.005f, 0.005f));
+	}
+	else if (modelType == ModelType::Heart) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, -1.75f, 0.0f));
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));
+	}
+	else if (modelType == ModelType::Heart2) {
+		modelMatrix = glm::mat4(1.0f);
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, 0.0f));//0.3 0.1
+		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.003f, 0.003f, 0.003f));//0.003
+	}
+	
 
 	//-----------------------旋转函数
 	modelMatrix = glm::rotate(modelMatrix, radians0, glm::vec3(0.0f, 1.0f, 0.0f));//L绕y轴
@@ -880,7 +996,23 @@ void processInput(GLFWwindow *window)
 	if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS) {
 		isMucusDrawed = !isMucusDrawed;
 	}
+	//是否释放鼠标
+	if ((glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS)) {
+		if (isMouseMove) {
+			glfwSetCursorPosCallback(window, mouse_callback);
+			glfwSetScrollCallback(window, scroll_callback);
 
+			// 是否捕获鼠标
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
+		else {
+			glfwSetCursorPosCallback(window, NULL);
+			glfwSetScrollCallback(window, scroll_callback);
+			// 是否捕获鼠标
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		}
+		isMouseMove = !isMouseMove;
+	}
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -976,6 +1108,11 @@ void generateTexture(GLuint &into, float width, float height, bool depth_stencil
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 void deleteAll() {
+	// Cleanup
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
 	// Beckmann texture buffer
 	glDeleteTextures(1, &beckmannTex);
 	glDeleteFramebuffers(1, &beckmannFBO);
@@ -1079,6 +1216,10 @@ void unwrapMesh()
 	modelMatrix = mat4(1.0f);
 	UpdateShaderMatrices();
 
+	/*
+		设置前向散射系数
+	*/
+	currentShader->setFloat("mix", forwardScatteringFactor);
 	// draw calls
 	drawModel(headMesh);
 
@@ -1213,6 +1354,13 @@ void mainPass()
 	modelMatrix = mat4(1.0f);
 	UpdateShaderMatrices();
 
+	/*
+		设置后向散射系数
+	*/
+	currentShader->setFloat("mix", backwardScatteringFactor);
+	currentShader->setFloat("m", roughness);
+	currentShader->setFloat("reflectivity", reflectivity);
+
 	// draw calls
 	drawModel(headMesh);//绘制原来的模型
 	//drawLight();
@@ -1252,4 +1400,33 @@ void SetShaderLight()
 	currentShader->setVec3("lightPos", lightPos);
 	currentShader->setVec4("lightColour", lightColour);
 	currentShader->setFloat("lightRadius", lightRadius);
+}
+//导出渲染结果到目标png图像中
+void exportRenderingResultImage(const char * fileName)
+{
+	unsigned char *mpixels = new unsigned char[SCR_WIDTH * SCR_HEIGHT * 4];//WIDTH和HEIGHT为所要保存的屏幕图像的宽度与高度
+	glReadBuffer(GL_FRONT);
+	glReadPixels(0, 0, SCR_WIDTH, SCR_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, mpixels);
+	glReadBuffer(GL_BACK);
+	for (int i = 0; i < (int)SCR_WIDTH*SCR_HEIGHT * 4; i += 4)
+	{
+		mpixels[i] ^= mpixels[i + 2] ^= mpixels[i] ^= mpixels[i + 2];
+	}
+	FIBITMAP* bitmap = FreeImage_Allocate(SCR_WIDTH, SCR_HEIGHT, 32, 8, 8, 8);
+
+	for (int y = 0; y < FreeImage_GetHeight(bitmap); y++)
+	{
+		BYTE *bits = FreeImage_GetScanLine(bitmap, y);
+		for (int x = 0; x < FreeImage_GetWidth(bitmap); x++)
+		{
+			bits[0] = mpixels[(y*SCR_WIDTH + x) * 4 + 0];
+			bits[1] = mpixels[(y*SCR_WIDTH + x) * 4 + 1];
+			bits[2] = mpixels[(y*SCR_WIDTH + x) * 4 + 2];
+			bits[3] = 255;
+			bits += 4;
+		}
+
+	}
+	bool bSuccess = FreeImage_Save(FIF_PNG, bitmap, fileName, PNG_DEFAULT);
+	FreeImage_Unload(bitmap);
 }
