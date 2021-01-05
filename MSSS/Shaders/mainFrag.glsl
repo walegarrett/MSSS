@@ -136,7 +136,10 @@ void main(void) {
 	float specular = specularKSK(beckmannTex, normal, lightVector, viewVector, m);
 
 	// Determine skin color from a diffuseColor map----------利用漫反射贴图决定皮肤的颜色---* lambert可以去除
-	fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) + vec3(specular), 1.0 );//fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) * lambert + vec3(specular), 1.0 );
+	//fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) + vec3(specular), 1.0 );
+	fragColor = vec4( (diffuseLight * pow(diffuse.rgb, vec3(1.0 - mix))) * lambert + vec3(specular), 1.0 );
+
+
 	//fragColor = vec4( vec3(diffuseLight * diffuse.rgb), 1.0 );
 	//fragColor = vec4( diffuseLight, 1.0 );
 
@@ -147,7 +150,8 @@ void main(void) {
 //-----------------------------------------------------------
 
 	if (!useBlur) {
-		fragColor = diffuse + vec4(specular);//fragColor = diffuse * lambert+ vec4(specular);
+		//fragColor = diffuse + vec4(specular);
+		fragColor = diffuse * lambert+ vec4(specular);
 		fragColor.a = 1.0f;
 	}
 }

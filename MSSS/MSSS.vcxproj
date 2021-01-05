@@ -149,13 +149,22 @@
     <None Include="Shaders\beckmannVert.glsl" />
     <None Include="Shaders\blurFrag.glsl" />
     <None Include="Shaders\blurVert.glsl" />
+    <None Include="Shaders\Common.include.glsl" />
+    <None Include="Shaders\convolutionFrag.glsl" />
+    <None Include="Shaders\convolutionVert.glsl" />
+    <None Include="Shaders\finalFrag.glsl" />
+    <None Include="Shaders\finalVert.glsl" />
     <None Include="Shaders\heart4.vs" />
+    <None Include="Shaders\irradianceFrag.glsl" />
+    <None Include="Shaders\irradianceVert.glsl" />
     <None Include="Shaders\lightFrag.glsl" />
     <None Include="Shaders\lightVert.glsl" />
     <None Include="Shaders\mainFrag.glsl" />
     <None Include="Shaders\mainVert.glsl" />
     <None Include="Shaders\mucusFrag.glsl" />
     <None Include="Shaders\mucusVert.glsl" />
+    <None Include="Shaders\newStretchFrag.glsl" />
+    <None Include="Shaders\newStretchVert.glsl" />
     <None Include="Shaders\noSSSFrag.glsl" />
     <None Include="Shaders\noSSSVert.glsl" />
     <None Include="Shaders\pbrFrag.glsl" />
@@ -164,6 +173,8 @@
     <None Include="Shaders\shadowVert.glsl" />
     <None Include="Shaders\stretchFrag.glsl" />
     <None Include="Shaders\stretchVert.glsl" />
+    <None Include="Shaders\tsmFrag.glsl" />
+    <None Include="Shaders\tsmVert.glsl" />
     <None Include="Shaders\unwrapFrag.glsl" />
     <None Include="Shaders\unwrapVert.glsl" />
   </ItemGroup>

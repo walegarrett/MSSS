@@ -29,6 +29,7 @@ void preSetFrameBuffers();
 void preSetShaders();
 void beckmannTextureBuffer();
 void shadowMapBuffer();
+void TSMBuffer();
 void convolved();
 void stretchMapBuffer();
 void unwrapBuffer();
@@ -37,12 +38,19 @@ void OpenGLAndOthersVariables();
 void SetCurrentShader(Shader* s);
 void UpdateShaderMatrices();
 void RenderScene();
+void TSMRenderScene();
 void computeBeckmannTex();
 void computeStretchMap();
 void shadowPass();
+void TSMPass();
+void convolutionStretch(GLuint &sourceTex, GLuint &targetTex, int num);
+void newStretchMapPass();
+void convolution(GLuint &sourceTex, GLuint &targetTex, int num);
+void irradianceMapPass();
 void unwrapMesh();
 void blurPass();
 void uvPass(GLuint &sourceTex, GLuint &targetTex);
+void RenderFinalTSM();
 void mainPass();
 void drawModel();
 void drawModel(Model* mesh);
@@ -67,6 +75,9 @@ mat4 modelMatrix;	//Model matrix. NOT MODELVIEW
 mat4 viewMatrix;		//View matrix
 mat4 textureMatrix;	//Texture matrix
 mat4 shadowMatrix;
+//π‚’’ø’º‰µƒ±‰ªªæÿ’Û
+mat4 lightProjMatrix;		//Projection matrix
+mat4 lightViewMatrix;		//View matrix
 float biasValues[16] = {
 	0.5, 0.0, 0.0, 0.0,
 	0.0, 0.5, 0.0, 0.0,
@@ -75,6 +86,8 @@ float biasValues[16] = {
 };
 //mat4 biasMatrix=make_mat4(biasValues);
 mat4 biasMatrix = mat4(1.0f);//-----------------------------------not--------------
+float gConvolutionScale[5] = { /*0.0064, */0.0484f, 0.187f, 0.567f, 1.99f, 7.41f };
+
 #pragma endregion
 #pragma region widthAndHeight
 // settings
@@ -82,6 +95,10 @@ const unsigned int SCR_WIDTH = 1800;//1800
 const unsigned int SCR_HEIGHT = 900;//900
 int		width = 1800;			//Render area width (not quite the same as window width)1900
 int		height = 900;			//Render area height (not quite the same as window height)1024
+
+
+float zNear = 0.1f;
+float zFar = 100.0f;
 #pragma endregion
 // camera
 //Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -112,6 +129,11 @@ Shader *unwrapShader;
 Shader *blurShader;
 Shader *mainShader;
 Shader *mucusShader;
+Shader *TSMShader;//∞ÎÕ∏√˜“ı”∞Ã˘Õº
+Shader *newStretchShader;
+Shader *irradianceShader;
+Shader *convolutionShader;
+Shader *finalShader;
 #pragma endregion
 
 #pragma region preDefine
@@ -126,22 +148,42 @@ GLuint stretchDepthTex;
 // Shadow map
 GLuint shadowFBO;
 GLuint shadowTex;
+// TSM map
+GLuint TSMFBO;
+GLuint TSMTex;
+GLuint TSMDepth;
+
 // 1 non-convolved & 5 convolved irradiance textures
 GLuint nonBlurredTexture;
 GLuint blurredTexture[5];
 // unwrap buffer
 GLuint unwrapFBO;
 GLuint unwrapDepthTex;
+
+//newStretchMap buffer
+GLuint newStretchFBO;
+GLuint newStretchTexture[6];
+//irradiance buffer
+GLuint irradianceFBO;
+GLuint irradianceTex[6];
+GLuint irradianceDepthTex;
+
+//convolution
+GLuint convolutionTempColourTex;
+GLuint convolutionStretchTempColourTex;
 // blur buffer
 GLuint blurFBO;
 GLuint tempColourTex;
 // bool variables
 bool firstFrame;
+bool firstFrame1;
 bool useBlur;
 bool useStretch;
+bool useTranslucent=true;
+bool useTSMRender = true;
 bool	init;	//Did the renderer initialise properly?
 bool isOriginal;
-bool isMucusDrawed=true;
+bool isMucusDrawed=false;
 //imGuiœ‡πÿ≤Œ ˝
 bool subsurfaceScatteringEnabled = true;
 float forwardScatteringFactor = 0.4;
@@ -150,7 +192,7 @@ bool taaEnabled = true;
 float roughness = 0.85;
 float reflectivity = 0.158;
 bool isMouseMove = true;
-bool shadowDrawed = false;
+bool shadowDrawed = true;
 int modelType = ModelType::Lungs1;
 #pragma endregion
 // load textures
@@ -186,6 +228,7 @@ void preSetFrameBuffers() {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #pragma endregion
 #pragma region shadow map buffer
+
 	// depth texture
 	glGenTextures(1, &shadowTex);
 	glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -204,7 +247,7 @@ void preSetFrameBuffers() {
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
 
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
-	glDrawBuffer(GL_NONE);
+	//glDrawBuffer(GL_NONE);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 	{
@@ -212,6 +255,60 @@ void preSetFrameBuffers() {
 	}
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#pragma endregion
+#pragma region TSM buffer
+	// frame buffer
+	glGenFramebuffers(1, &TSMFBO);
+	
+	//∞ÎÕ∏√˜“ı”∞Ã˘Õº—’…´Œ∆¿Ì
+	glGenTextures(1, &TSMTex);
+	glBindTexture(GL_TEXTURE_2D, TSMTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, MAP_SIZE, MAP_SIZE, 0, GL_RGBA, GL_INT, NULL);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, TSMFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, TSMTex, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	// depth texture
+	glGenTextures(1, &TSMDepth);
+	glBindTexture(GL_TEXTURE_2D, TSMDepth);
+
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, MAP_SIZE, MAP_SIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
+
+	//glBindTexture(GL_TEXTURE_2D, 0);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, TSMFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, TSMDepth, 0);
+
+	//glDrawBuffer(GL_NONE);
+
+	/*if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		return;
+	}*/
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#pragma endregion
+#pragma region newStretch textures
+	// frame buffer
+	glGenFramebuffers(1, &newStretchFBO);
+	for (int i = 0; i < 6; ++i)
+	{
+		generateTexture(newStretchTexture[i], MAP_SIZE, MAP_SIZE);
+	}
 #pragma endregion
 #pragma region 1 non-convolved & 5 convolved irradiance textures
 	generateTexture(nonBlurredTexture, MAP_SIZE, MAP_SIZE);
@@ -262,6 +359,28 @@ void preSetFrameBuffers() {
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #pragma endregion
+#pragma region irradiance buffer
+	// depth texture
+	generateTexture(irradianceDepthTex, MAP_SIZE, MAP_SIZE, true);
+
+	// frame buffer
+	glGenFramebuffers(1, &irradianceFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, irradianceFBO);
+	for (int i = 0; i < 6; ++i)
+	{
+		generateTexture(irradianceTex[i], MAP_SIZE, MAP_SIZE);
+	}
+	
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, irradianceDepthTex, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, irradianceDepthTex, 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		return;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#pragma endregion
 #pragma region blur buffer
 	// colour texture
 	generateTexture(tempColourTex, MAP_SIZE, MAP_SIZE);
@@ -269,11 +388,17 @@ void preSetFrameBuffers() {
 	// frame buffer
 	glGenFramebuffers(1, &blurFBO);
 #pragma endregion
+#pragma region convolution buffer
+	// colour texture
+	generateTexture(convolutionTempColourTex, MAP_SIZE, MAP_SIZE);
+	generateTexture(convolutionStretchTempColourTex, MAP_SIZE, MAP_SIZE);
+#pragma endregion
 #pragma region OpenGL & others variables
 	glEnable(GL_DEPTH_TEST);
 	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 	//projMatrix = glm::perspective(ZNEAR, ZFAR, (float)width / (float)height, FOV);
 	firstFrame = true;
+	firstFrame1 = true;
 	useBlur = true;
 	useStretch = true;
 	init = true;
@@ -303,6 +428,12 @@ void preSetShaders() {
 	mainShader = new Shader("Shaders/mainVert.glsl", "Shaders/mainFrag.glsl");
 	//-------------------------------------------mucus
 	mucusShader = new Shader("Shaders/mucusVert.glsl", "Shaders/mucusFrag.glsl");
+	//-------------------------------------------TSM
+	TSMShader = new Shader("Shaders/tsmVert.glsl", "Shaders/tsmFrag.glsl");
+	newStretchShader = new Shader("Shaders/newStretchVert.glsl", "Shaders/newStretchFrag.glsl");
+	irradianceShader = new Shader("Shaders/irradianceVert.glsl", "Shaders/irradianceFrag.glsl");
+	convolutionShader = new Shader("Shaders/convolutionVert.glsl", "Shaders/convolutionFrag.glsl");
+	finalShader = new Shader("Shaders/finalVert.glsl", "Shaders/finalFrag.glsl");
 
 #pragma endregion
 }
@@ -354,6 +485,51 @@ void shadowMapBuffer() {
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #pragma endregion
+}
+void TSMBuffer() {
+	// frame buffer
+	glGenFramebuffers(1, &TSMFBO);
+
+	//∞ÎÕ∏√˜“ı”∞Ã˘Õº—’…´Œ∆¿Ì
+	glGenTextures(1, &TSMTex);
+	glBindTexture(GL_TEXTURE_2D, TSMTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, MAP_SIZE, MAP_SIZE, 0, GL_RGBA, GL_INT, NULL);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, TSMFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, TSMTex, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	// depth texture
+	glGenTextures(1, &TSMDepth);
+	glBindTexture(GL_TEXTURE_2D, TSMDepth);
+
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, MAP_SIZE, MAP_SIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, TSMFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, TSMDepth, 0);
+	glDrawBuffer(GL_NONE);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		return;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 void convolved() {
 #pragma region 1 non-convolved & 5 convolved irradiance textures
@@ -529,7 +705,13 @@ int main()
 		
 		//
 		//------------------------------------------------------‰÷»æ∫Ø ˝----------------------------------------------
-		RenderScene();
+		if (!useTSMRender) {
+			RenderScene();
+		}
+		else {
+			TSMRenderScene();
+		}
+		
 		//
 		//-------------------------------------------------------------------------------------------------------------
 
@@ -584,7 +766,49 @@ void RenderScene()//---------------------------------------------------’Ê µ‰÷»æ≥
 	// clean up
 	glUseProgram(0);
 }
+void TSMRenderScene()//---------------------------------------------------’Ê µ‰÷»æ≥°æ∞£¨“≤æÕ «‰÷»æ—≠ª∑
+{
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	if (firstFrame1)
+	{
+		computeBeckmannTex();//“ªø™ ºº∆À„beckmanŒ∆¿Ì
+		newStretchMapPass();//’‚¿Ôº∆À„¿≠…ÏΩ√’˝Ã˘Õº
+
+		firstFrame1 = false;
+	}
+
+	TSMPass();
+
+	//æÌª˝∑¯’’∂»Ã˘Õº
+	irradianceMapPass();
+
+
+	//// «∑Òº”…œ¥Œ±Ì√Ê…¢…‰µƒ–ßπ˚
+	if (!subsurfaceScatteringEnabled) {
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+
+		drawOriginalModel();
+		// clean up
+		glUseProgram(0);
+	}else {
+		//ªÊ÷∆SSS
+		//∆Ù”√ªÏ∫œ‘Ï≥…∞ÎÕ∏√˜µ»ªÏ∫œ–ß”¶
+		//glEnable(GL_BLEND);//∆Ù∂ØªÏ∫œ
+		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);//…Ë÷√œ‡”¶µƒªÏ∫œ∫Ø ˝º¥‘¥“Ú◊”÷µ∫Õƒø±Í“Ú◊”÷µ
+		RenderFinalTSM();
+	}
+	// «∑Ò–Ë“™ªÊ÷∆§“∫≤„
+	if (isMucusDrawed) {
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+
+		drawMucusLayer();
+	}
+	// clean up
+	glUseProgram(0);
+}
 void initImGUI() {
 	// Start the Dear ImGui frame ∆Ù∂ØIMgui FrameøÚº‹.
 	ImGui_ImplOpenGL3_NewFrame();
@@ -593,6 +817,8 @@ void initImGUI() {
 
 	// gui window
 	ImGui::Begin("Subsurface Scattering Demo");
+	// π”√ƒƒ÷÷‰÷»æ∆˜
+	ImGui::Checkbox("Using TSMRenderer", &useTSMRender);
 	//øÿ÷∆…¢…‰
 	ImGui::Checkbox("Subsurface Scattering", &subsurfaceScatteringEnabled);
 	ImGui::SliderFloat("Forward Scattering Mix", &forwardScatteringFactor, 0.00f, 1.00f);
@@ -607,6 +833,9 @@ void initImGUI() {
 	ImGui::SliderFloat("Base Reflectivity", &reflectivity, 0.00f, 1.00f);
 	// «∑ÒªÊ÷∆“ı”∞
 	ImGui::Checkbox("Shadow Map", &shadowDrawed);
+	// «∑ÒªÊ÷∆∞ÎÕ∏√˜–ßπ˚
+	ImGui::Checkbox("Translucent", &useTranslucent);
+
 	//ƒ£–Õµƒ—°‘Ò
 	if (ImGui::RadioButton("Lungs", true)) {
 		modelType = ModelType::Lungs1;
@@ -646,8 +875,12 @@ void initImGUI() {
 
 	//µº≥ˆ‰÷»æÕº∆¨
 	if (ImGui::Button("save Rendering Result Image")) {
-		string fileName = headMesh->getFileName();
+		string fileName = "results/";
+		fileName += headMesh->getFileName();
 		fileName = fileName.substr(0, fileName.find_first_of('.'));
+		if (useTSMRender) {
+			fileName += "-tsm";
+		}else fileName += "-noTsm"; 
 		if (subsurfaceScatteringEnabled) {
 			fileName += "-sss";
 		}else fileName += "-original";
@@ -657,6 +890,9 @@ void initImGUI() {
 		if (useBlur) {
 			fileName += "-useBlur";
 		}else fileName += "-noBlur";
+		if (useTranslucent) {
+			fileName += "-translucent";
+		}else fileName += "-noTranslucent";
 		std::ostringstream ss;
 		ss << forwardScatteringFactor;
 		fileName += "-forward_";
@@ -696,6 +932,7 @@ void drawOriginalModel() {
 		//------------------------------------------------------original---------------------------------------------------
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 	//---------…Ë÷√µ±«∞µƒ◊≈…´∆˜
 	SetCurrentShader(basicShader);//
 
@@ -740,49 +977,7 @@ void drawMucusLayer() {
 	UpdateShaderMatrices();
 	drawModel(mucusMesh);
 }
-void computeBeckmannTex()
-{
-	glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
-	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//¥ø∫⁄
-	glClear(GL_COLOR_BUFFER_BIT);
-	//shader
-	SetCurrentShader(beckmannShader);//--------------------not-----------------------
-	// matrices
-	projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
-	viewMatrix = mat4(1.0f);
-	modelMatrix = mat4(1.0f);
-	UpdateShaderMatrices();
-	// draw call
-	renderQuad();
-	// clean up
-	glUseProgram(0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0.0f, 0.0f, (float)width, (float)height);
-}
-void computeStretchMap(){
-	//-------------------------------------------------------------computeStretchMap();---------------------------------
-			// set up
-	glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
-	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-	// shader
-	SetCurrentShader(stretchShader);
-	// matrices---------------------------------------not---------------------------
-	projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
-	//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
-	viewMatrix = camera.GetViewMatrix();
-	//viewMatrix = camera->BuildViewMatrix();---------------------not------------------
-	modelMatrix = mat4(1.0f);
-	UpdateShaderMatrices();
-	// draw calls
-	drawModel(headMesh);
-	// clean up
-	glUseProgram(0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0.0f, 0.0f, (float)width, (float)height);
-}
+
 void drawModel()
 {
 	//----------------------------------------HAND----------------------------------------------------
@@ -1078,7 +1273,124 @@ void UpdateShaderMatrices() {
 	currentShader->setMat4("projMatrix", projMatrix);
 	currentShader->setMat4("textureMatrix", textureMatrix);
 }
+void computeBeckmannTex()
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
+	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//¥ø∫⁄
+	glClear(GL_COLOR_BUFFER_BIT);
+	//shader
+	SetCurrentShader(beckmannShader);//--------------------not-----------------------
+	// matrices
+	projMatrix = glm::ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
+	viewMatrix = mat4(1.0f);
+	modelMatrix = mat4(1.0f);
+	UpdateShaderMatrices();
+	// draw call
+	renderQuad();
+	// clean up
+	glUseProgram(0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0.0f, 0.0f, (float)width, (float)height);
+}
+void computeStretchMap() {
+	//-------------------------------------------------------------computeStretchMap();---------------------------------
+			// set up
+	glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
+	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	// shader
+	SetCurrentShader(stretchShader);
+	// matrices---------------------------------------not---------------------------
+	projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
+	//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);
+	viewMatrix = camera.GetViewMatrix();
+	//viewMatrix = camera->BuildViewMatrix();---------------------not------------------
+	modelMatrix = mat4(1.0f);
+	UpdateShaderMatrices();
+	// draw calls
+	drawModel(headMesh);
+	// clean up
+	glUseProgram(0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0.0f, 0.0f, (float)width, (float)height);
+}
+void convolutionStretch(GLuint &sourceTex, GLuint &targetTex, int num)
+{
+	glPushAttrib(GL_VIEWPORT_BIT);
+	glm::vec2 stepX = glm::vec2(1.0f, 0.0f) * (1.0f / MAP_SIZE);
+	glm::vec2 stepY = glm::vec2(0.0f, 1.0f) * (1.0f / MAP_SIZE);
+	currentShader->setVec2("Step", stepX.x, stepX.y);
+	currentShader->setFloat("GaussWidth", sqrtf(gConvolutionScale[num]));
+	
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, convolutionStretchTempColourTex, 0);
 
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, sourceTex);
+	renderQuad();
+
+	currentShader->setVec2("Step", stepY.x, stepY.y);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, targetTex, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, convolutionStretchTempColourTex);
+	renderQuad();
+
+	glPopAttrib();
+}
+void newStretchMapPass() {
+	// set up
+	glBindFramebuffer(GL_FRAMEBUFFER, newStretchFBO);
+	//“ªø™ ºΩ´ƒ£–Õ≥°æ∞‰÷»æµΩ“ª’≈—’…´Œ∆¿Ì÷–
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, newStretchTexture[0], 0);
+	glPushAttrib(GL_VIEWPORT_BIT);
+	glViewport(0, 0, MAP_SIZE, MAP_SIZE);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	SetCurrentShader(newStretchShader);
+	float gStrechScale = 0.0014444444f;
+	currentShader->setFloat("Scale", gStrechScale);
+
+	UpdateShaderMatrices();
+
+	drawModel(headMesh);
+
+	glUseProgram(0);
+	glPopAttrib();
+
+	SetCurrentShader(convolutionShader);
+	modelMatrix = mat4(1.0f);
+	viewMatrix = camera.GetViewMatrix();
+	viewMatrix = mat4(1.0f);
+	//projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);
+	projMatrix = ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
+	UpdateShaderMatrices();
+	// shader textures
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "InputTex"), 0);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "stretchTex"), 2);
+
+	currentShader->setBool("isBlurDiffusion", false);
+	currentShader->setBool("isBlurStretch", true);
+	
+
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, stretchColourTex);
+
+	//Utility::SaveTextureToPfm("StrechXY0.pfm", gStretchBuffer[0]->GetColorTex(), gWindowWidth, gWindowWidth);
+	convolutionStretch(newStretchTexture[0], newStretchTexture[1], 0);
+	convolutionStretch(newStretchTexture[1], newStretchTexture[2], 1);
+	convolutionStretch(newStretchTexture[2], newStretchTexture[3], 2);
+	convolutionStretch(newStretchTexture[3], newStretchTexture[4], 3);
+
+	// clean up
+	glUseProgram(0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0.0f, 0.0f, (float)width, (float)height);
+}
 
 void shadowPass()
 {
@@ -1112,7 +1424,42 @@ void shadowPass()
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glUseProgram(0);
 }
+//‰÷»æ∞ÎÕ∏√˜“ı”∞Ã˘Õº
+void TSMPass() {
+	glBindFramebuffer(GL_FRAMEBUFFER, TSMFBO);
 
+	glPushAttrib(GL_VIEWPORT_BIT);
+	glViewport(0, 0, MAP_SIZE, MAP_SIZE);
+
+	glClearColor(1.0f, 1.0f, 1.0f, 0.0f);
+	glClearDepth(1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
+
+	// shader
+	SetCurrentShader(TSMShader);
+	projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
+	viewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
+	modelMatrix = mat4(1.0f);
+	shadowMatrix = biasMatrix * (projMatrix * viewMatrix);
+
+	currentShader->setFloat("ZNear", zNear);
+	currentShader->setFloat("ZFar", zFar);
+	currentShader->setBool("isShadowVSM", true);
+	UpdateShaderMatrices();
+
+	// draw calls
+	drawModel(headMesh);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glPopAttrib();
+	glUseProgram(0);
+
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+}
 void unwrapMesh()
 {
 	//----------------------------------------------------------unwrapMesh();----------------------------------------
@@ -1151,6 +1498,107 @@ void unwrapMesh()
 	currentShader->setFloat("mix", forwardScatteringFactor);
 	// draw calls
 	drawModel(headMesh);
+
+	// clean up
+	glUseProgram(0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0.0f, 0.0f, (float)width, (float)height);
+}
+void convolution(GLuint &sourceTex, GLuint &targetTex, int num)
+{
+	glPushAttrib(GL_VIEWPORT_BIT);
+	glm::vec2 stepX = glm::vec2(1.0f, 0.0f) * (1.0f / MAP_SIZE);
+	glm::vec2 stepY = glm::vec2(0.0f, 1.0f) * (1.0f / MAP_SIZE);
+	currentShader->setVec2("Step", stepX.x, stepX.y);
+	currentShader->setFloat("GaussWidth", sqrtf(gConvolutionScale[num]));
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, convolutionTempColourTex, 0);
+
+	//…Ë÷√œ‡”¶µƒ¿≠…ÏΩ√’˝Œ∆¿Ì
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, newStretchTexture[num]);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, sourceTex);
+	renderQuad();
+
+	currentShader->setVec2("Step", stepY.x, stepY.y);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, targetTex, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, convolutionTempColourTex);
+	renderQuad();
+
+	glPopAttrib();
+}
+void irradianceMapPass() {
+
+	glPushAttrib(GL_VIEWPORT_BIT);
+	glViewport(0, 0, MAP_SIZE, MAP_SIZE);
+
+	SetCurrentShader(irradianceShader);
+
+	// set up
+	glBindFramebuffer(GL_FRAMEBUFFER, irradianceFBO);
+	//“ªø™ ºΩ´ƒ£–Õ≥°æ∞‰÷»æµΩ“ª’≈—’…´Œ∆¿Ì÷–
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, irradianceTex[0], 0);
+	
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	//∞Û∂®∞ÎÕ∏√˜“ı”∞Ã˘ÕºŒ∆¿Ì
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "shadowTex"), 2);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, TSMTex);
+
+	lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
+	lightViewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
+	currentShader->setMat4("lightViewMatrix", lightViewMatrix);
+	currentShader->setMat4("lightProjMatrix", lightProjMatrix);
+
+	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));
+	currentShader->setFloat("mix", forwardScatteringFactor);
+	currentShader->setBool("isShadowVSM", true);
+
+	currentShader->setFloat("ZNear", zNear);
+	currentShader->setFloat("ZFar", zFar);
+
+	//…Ë÷√π‚’’œ‡πÿ≤Œ ˝
+	SetShaderLight();
+	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+	viewMatrix = camera.GetViewMatrix();
+	modelMatrix = mat4(1.0f);
+	//…Ë÷√»˝∏ˆæÿ’Û
+	UpdateShaderMatrices();
+
+	//‰÷»æƒ£–Õ
+	drawModel(headMesh);
+
+	glUseProgram(0);
+	glPopAttrib();
+
+	//---------------æÌª˝º∆À„
+	SetCurrentShader(convolutionShader);
+
+	modelMatrix = mat4(1.0f);
+	viewMatrix = mat4(1.0f);
+	projMatrix = ortho(-1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f);
+	UpdateShaderMatrices();
+	// shader textures
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "InputTex"), 0);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "stretchTex"), 2);
+
+	currentShader->setBool("isBlurDiffusion", true);
+	currentShader->setBool("isBlurStretch", false);
+
+
+	//convolve 5 times!!!!!
+	convolution(irradianceTex[0], irradianceTex[1], 0);
+	convolution(irradianceTex[1], irradianceTex[2], 1);
+	convolution(irradianceTex[2], irradianceTex[3], 2);
+	convolution(irradianceTex[3], irradianceTex[4], 3);
+	convolution(irradianceTex[4], irradianceTex[5], 4);
 
 	// clean up
 	glUseProgram(0);
@@ -1289,11 +1737,96 @@ void mainPass()
 	currentShader->setFloat("mix", backwardScatteringFactor);
 	currentShader->setFloat("m", roughness);
 	currentShader->setFloat("reflectivity", reflectivity);
+	currentShader->setBool("isShadowVSM", true);
 
 	// draw calls
 	drawModel(headMesh);//ªÊ÷∆‘≠¿¥µƒƒ£–Õ
 	//drawLight();
 }
+
+void RenderFinalTSM()
+{
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClearDepth(1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+
+
+	SetCurrentShader(finalShader);
+
+	// shader textures
+	//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "diffuseTex"), 0);
+	//glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "bumpTex"), 1);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "shadowTex"), 2);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "beckmannTex"), 3);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "StretchTex"), 4);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex1"), 5);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex2"), 6);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex3"), 7);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex4"), 8);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex5"), 9);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex6"), 10);
+
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, TSMTex);
+	glActiveTexture(GL_TEXTURE3);
+	glBindTexture(GL_TEXTURE_2D, beckmannTex);
+	glActiveTexture(GL_TEXTURE4);
+	glBindTexture(GL_TEXTURE_2D, newStretchTexture[2]);//÷∏∂®¿≠…ÏΩ√’˝Œ∆¿Ì
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, irradianceTex[0]);
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_2D, irradianceTex[1]);
+	glActiveTexture(GL_TEXTURE7);
+	glBindTexture(GL_TEXTURE_2D, irradianceTex[2]);
+	glActiveTexture(GL_TEXTURE8);
+	glBindTexture(GL_TEXTURE_2D, irradianceTex[3]);
+	glActiveTexture(GL_TEXTURE9);
+	glBindTexture(GL_TEXTURE_2D, irradianceTex[4]);
+	glActiveTexture(GL_TEXTURE10);
+	glBindTexture(GL_TEXTURE_2D, irradianceTex[5]);
+
+	// shader variables
+	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//------------not---------------
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "useBlur"), useBlur);
+
+	lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
+	lightViewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
+	currentShader->setMat4("LightView", lightViewMatrix);
+	currentShader->setMat4("LightProj", lightProjMatrix);
+
+	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));
+	currentShader->setFloat("mix", forwardScatteringFactor);
+	currentShader->setBool("isShadowVSM", true);
+	currentShader->setBool("useTranslucent", useTranslucent);
+
+	currentShader->setFloat("mix", backwardScatteringFactor);
+	currentShader->setFloat("m", roughness);
+	currentShader->setFloat("reflectivity", reflectivity);
+
+	currentShader->setFloat("ZNear", zNear);
+	currentShader->setFloat("ZFar", zFar);
+
+	projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+	viewMatrix = camera.GetViewMatrix();
+	modelMatrix = mat4(1.0f);
+
+	UpdateShaderMatrices();
+	SetShaderLight();
+
+	drawModel(headMesh);//ªÊ÷∆‘≠¿¥µƒƒ£–Õ
+
+	//glUseProgram(0);
+
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+
+
+	//Utility::SaveTextureToPfm("final.pfm",gStretchBuffer[4]->GetColorTex(), gWindowWidth, gWindowWidth);
+}
+
 // renderQuad() renders a 1x1 XY quad in NDC
 // -----------------------------------------
 unsigned int quadVAO = 0;

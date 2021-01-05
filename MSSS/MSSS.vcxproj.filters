@@ -69,6 +69,17 @@
     <None Include="Shaders\pbrVert.glsl" />
     <None Include="Shaders\noSSSFrag.glsl" />
     <None Include="Shaders\noSSSVert.glsl" />
+    <None Include="Shaders\tsmFrag.glsl" />
+    <None Include="Shaders\tsmVert.glsl" />
+    <None Include="Shaders\Common.include.glsl" />
+    <None Include="Shaders\newStretchVert.glsl" />
+    <None Include="Shaders\newStretchFrag.glsl" />
+    <None Include="Shaders\convolutionVert.glsl" />
+    <None Include="Shaders\convolutionFrag.glsl" />
+    <None Include="Shaders\irradianceVert.glsl" />
+    <None Include="Shaders\irradianceFrag.glsl" />
+    <None Include="Shaders\finalVert.glsl" />
+    <None Include="Shaders\finalFrag.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="assimp-vc140-mt.lib" />
