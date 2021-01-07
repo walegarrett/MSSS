@@ -80,6 +80,8 @@
     <None Include="Shaders\irradianceFrag.glsl" />
     <None Include="Shaders\finalVert.glsl" />
     <None Include="Shaders\finalFrag.glsl" />
+    <None Include="Shaders\debugVert.glsl" />
+    <None Include="Shaders\debugFrag.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="assimp-vc140-mt.lib" />

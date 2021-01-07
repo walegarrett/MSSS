@@ -66,12 +66,6 @@ float Shadow(vec2 UV, sampler2D shadowTex, float depth)
     return (texture(shadowTex, UV).r < depth) ? 0.0 : 1.0;
 }
 
-float Shadow1(vec2 UV, sampler2D shadowTex, float depth)
-{
-	//depth表示当前深度
-    return (texture(shadowTex, UV).r < depth) ? 0.0 : 1.0;
-}
-
 
 float ShadowPCF(vec2 UV, sampler2D shadowTex, float depth, int samples, float width)
 {
@@ -89,7 +83,7 @@ float ShadowPCF(vec2 UV, sampler2D shadowTex, float depth, int samples, float wi
     shadow /= samples * samples;
     return shadow;
 }
-
+//dist表示当前的深度值，moments.x表示离光照最近点的深度值
 float chebyshevUpperBound(float dist, vec2 moments)
 {
 	// Surface is fully lit. as the current fragment is before the light occluder
@@ -160,7 +154,7 @@ void main()
 
 	//当前的阴影深度
 	float depth0 = NormalizedDepth(oLightDist, ZNear, ZFar);
-	//用于从半透明阴影贴图中索引离光最近的深度，坐标
+	//用于从半透明阴影贴图中索引离光最近的深度，获得的是离光最近点的纹理坐标
 	vec2 UV0 = ShadowTexCoord(oShadowCoord);
 
 
@@ -216,7 +210,6 @@ void main()
     {  
 		thicknessToLight = 100.0; //100.0 
     } 
-	 
     float correctedThickness = saturate( -bumpDot_L0 ) * thicknessToLight;  
     float finalThickness = mix( thicknessToLight, correctedThickness, backFacingEst );  
    

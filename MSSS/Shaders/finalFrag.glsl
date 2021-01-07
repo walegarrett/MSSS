@@ -5,7 +5,7 @@ uniform sampler2D texture_normal1;
 uniform sampler2D shadowTex;//阴影纹理
 uniform sampler2D beckmannTex;//beckmann纹理
 uniform sampler2D StretchTex;//拉伸矫正贴图
-
+uniform sampler2D seamMask;//处理接缝的蒙板贴图
 uniform sampler2D blurredTex1;//这些是高斯模糊相关
 uniform sampler2D blurredTex2;
 uniform sampler2D blurredTex3;
@@ -42,7 +42,7 @@ const vec3 gaussWeights6 = vec3(0.078, 0.000, 0.000);
 
 
 uniform float Rho_s = 0.18;
-uniform float DepthScale = 10.0;
+uniform float DepthScale = 10.0;//10.0
 uniform float EnvAmount = 0.2;
 uniform float SpecularIntensity = 1.88;
 
@@ -176,6 +176,36 @@ float KS_Skin_Specular( vec3 N, // Bumped surface normal
 	return result;  
 }  
 
+// SSS Transmittance Function:-----------------------------------------------------SSS的透射方程
+vec3 transmittance(	float translucency,			// control the transmittance effect. Range: [0..1]
+					float width,				// Width of the filter
+					vec3 worldNormal,			// Normal in world space
+					vec3 light,					// Light vector: lightWorldPosition - worldPosition
+					float thickness             // 厚度
+					) {
+	// Calculate the scale of the effect:
+	float scale = 8.25 * (1.0 - translucency) / width;
+
+
+	float diff = scale * abs(thickness);
+
+	float d = diff;
+
+
+	// With the thickness, calculate the color using the precalculated transmittance profile:
+	float dd = -d * d;
+
+	vec3 profile =  vec3(0.233, 0.455, 0.649) * exp(dd / 0.0064) +
+					vec3(0.1,   0.336, 0.344) * exp(dd / 0.0484) +
+					vec3(0.118, 0.198, 0.0)   * exp(dd / 0.187) +
+					vec3(0.113, 0.007, 0.007) * exp(dd / 0.567) +
+					vec3(0.358, 0.004, 0.0)   * exp(dd / 1.99) +
+					vec3(0.078, 0.0,   0.0)   * exp(dd / 7.41);
+
+	//使用剖面近似从对象后面来的透射光
+    // Using the profile, approximate the transmitted lighting from the back of the object:
+    return profile * clamp(0.0 + dot(light, -worldNormal), 0.0, 1.0);
+}
 void main()
 {
 	// lighting parameters
@@ -222,11 +252,14 @@ void main()
 	float rFactor = max(0.0, dot(halfDir, normal));
 	float sFactor = pow(rFactor, 50.0);
 
-
-	lambert *= L0Shadow;
+	lambert *= L0Shadow;//L0Shadow
 
 	vec3 colour = (diffuse.rgb * lightColour.rgb);
 	colour += (lightColour.rgb * sFactor) * 0.33;//0.33,0.55
+	colour = (lightColour.rgb * sFactor) * 0.33;//0.33,0.55
+
+	// correct seam problems
+    vec3 comparativeLocalLightColor = colour * lambert;
 // ----------------------------------------------------------
 
 	// The total diffuse light exiting the surface表面出射的所有漫反射光线（其实是辐照度贴图）
@@ -240,7 +273,6 @@ void main()
 	vec4 irrad6tap = texture( blurredTex6, oTex );
 	
 	diffuseLight += gaussWeights1 * irrad1tap.xyz;
-	
 	diffuseLight += gaussWeights2 * irrad2tap.xyz;
 	diffuseLight += gaussWeights3 * irrad3tap.xyz;
 	diffuseLight += gaussWeights4 * irrad4tap.xyz;
@@ -250,6 +282,12 @@ void main()
 	vec3 normConst = gaussWeights1 + gaussWeights2 + gaussWeights3 + gaussWeights4 + gaussWeights5 + gaussWeights6;
 	diffuseLight /= normConst; // Renormalize to white diffuse light
 
+	// Deal with seam
+	float mask = texture(seamMask, oTex).x;
+    float alterSeamMask = pow( 1.0 - mask, 0.03);//0.03
+
+	// correct seam problems
+	//diffuseLight =  mix( diffuseLight, comparativeLocalLightColor, alterSeamMask); 
 
 	//是否渲染半透明效果
 	if(useTranslucent){
@@ -267,24 +305,31 @@ void main()
 		vec3 TSMtap0 = texture( shadowTex, UV0).xyz; 
 		texDist = length(oTex.xy - TSMtap0.yz);
 		
-		// Four average thicknesses through the object (in mm)  
+		// Four average thicknesses through the object (in mm)  计算厚度
 		thickness_mm = DepthScale * RealDepth ( vec4( irrad2tap.w, irrad3tap.w,  irrad4tap.w, irrad5tap.w ), vec2(ZNear, ZFar));
-		fades = exp( thickness_mm * thickness_mm * inv_a );  
+		fades = exp( thickness_mm * thickness_mm * inv_a );
 		blend = textureScale *  texDist;
 
 		blendFactor3 = saturate(blend / ( a_values.y * 6.0) );  
 		blendFactor4 = saturate(blend / ( a_values.z * 6.0) );  
 		blendFactor5 = saturate(blend / ( a_values.w * 6.0) );  
 		
-		/*
+		
+		
 		diffuseLight += gaussWeights4  * fades.y * blendFactor3 * texture( blurredTex4, TSMtap0.yz ).xyz / normConst;  
 		diffuseLight += gaussWeights5  * fades.z * blendFactor4 * texture( blurredTex5, TSMtap0.yz ).xyz / normConst; 
 		diffuseLight += gaussWeights6  * fades.w * blendFactor5 * texture( blurredTex6, TSMtap0.yz ).xyz / normConst;
-		*/
-		diffuseLight +=  texture( blurredTex4, TSMtap0.yz ).xyz *5.0;  
-		diffuseLight +=  texture( blurredTex5, TSMtap0.yz ).xyz *5.0; 
-		diffuseLight +=  texture( blurredTex6, TSMtap0.yz ).xyz *5.0;
+		
 
+		{
+
+			// Calculate some terms we will use later on:
+			vec3 f1 = lightColour.rgb * atten;
+			vec3 f2 = diffuse.rgb * f1;
+			//0.7   0.03
+			//diffuseLight += f2 * transmittance(0.7, 0.03, IN.normal, L0, length(fades));
+			diffuseLight += f2 * transmittance(0.7, 0.03, -IN.normal, L0, length(fades));
+		}
 	}
 
 	// Determine skin color from a diffuseColor map,加上漫反射光
@@ -300,8 +345,8 @@ void main()
 	float specular = specularKSK(beckmannTex, normal, lightVector, viewVector, m);
 
 	//注意：这里我没有加上阴影，阴影部分计算有点问题
-	//FragColor = vec4(diffuseLight + vec3(specular), 1.0 );  
-	FragColor = vec4(diffuseLight * lambert + vec3(specular), 1.0);  
+	FragColor = vec4(diffuseLight + vec3(specular), 1.0 );  
+	//FragColor = vec4(diffuseLight * lambert + vec3(specular), 1.0);  
 
 	if (!useBlur) {
 		//FragColor = diffuse + vec4(specular);//

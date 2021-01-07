@@ -16,7 +16,7 @@ void main()
 		float dx = dFdx(oDepth);
 		float dy = dFdy(oDepth);
 		float depthSquared = oDepth * oDepth +0.25*(dx*dx+dy*dy) ;
-		
 		FragColor = vec4(oDepth, oTex, depthSquared);
+		//FragColor = vec4(0.3, oTex, depthSquared);
 	}	
 }

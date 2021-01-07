@@ -1,8 +1,8 @@
 #version 330
 
 uniform mat4 modelMatrix;
-uniform mat4 viewMatrix;
-uniform mat4 projMatrix;
+uniform mat4 lightViewMatrix;
+uniform mat4 lightProjMatrix;
 
 
 uniform float Grow =  0.000001;
@@ -19,13 +19,14 @@ out vec2 oTex;
 
 void main()
 {
-	mat4 WorldView = viewMatrix * modelMatrix;
+	mat4 WorldView = lightViewMatrix * modelMatrix;
 
 	vec4 modelPos = vec4(position, 1.0f);
 	modelPos.xyz += normalize(normal) * Grow;  // scale vertex along normal
-	gl_Position = projMatrix * WorldView * modelPos;
+	gl_Position = lightProjMatrix * WorldView * modelPos;
 
 	vec4 viewPos = WorldView * vec4(position, 1.0f);
 	oDepth = (-viewPos.z-ZNear)/(ZFar-ZNear); // will map near..far to 0..1
+	//oDepth = -viewPos.z; // will map near..far to 0..1
 	oTex = texCoord;	
 }

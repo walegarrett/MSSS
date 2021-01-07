@@ -152,6 +152,8 @@
     <None Include="Shaders\Common.include.glsl" />
     <None Include="Shaders\convolutionFrag.glsl" />
     <None Include="Shaders\convolutionVert.glsl" />
+    <None Include="Shaders\debugFrag.glsl" />
+    <None Include="Shaders\debugVert.glsl" />
     <None Include="Shaders\finalFrag.glsl" />
     <None Include="Shaders\finalVert.glsl" />
     <None Include="Shaders\heart4.vs" />

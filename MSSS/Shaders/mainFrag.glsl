@@ -72,7 +72,7 @@ float specularKSK(sampler2D beckmannTex, vec3 normal, vec3 lightVector, vec3 vie
     float f = fresnel(halfVectorN, viewVector, reflectivity);//调节数值越高高光效果越明显0.028 0.128 0.158
     float ksk = max(0.0, ph * f / dot(halfVector, halfVector));
 
-    return NdotL * ksk;   
+    return NdotL * ksk;
 }
 
 void main(void) {

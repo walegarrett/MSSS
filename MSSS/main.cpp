@@ -14,8 +14,8 @@
 using namespace glm;
 //Ô¤¶¨Òå
 #define ZNEAR		0.1f
-#define ZFAR		10.0f
-#define FOV			25.0f
+#define ZFAR		100.0f
+#define FOV			90.0f
 #define MAP_SIZE	(2048)//1024
 #pragma region allTheFunctions
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -52,6 +52,8 @@ void blurPass();
 void uvPass(GLuint &sourceTex, GLuint &targetTex);
 void RenderFinalTSM();
 void mainPass();
+void debugPass();
+void debugPassTsm();
 void drawModel();
 void drawModel(Model* mesh);
 void renderQuad();
@@ -134,6 +136,7 @@ Shader *newStretchShader;
 Shader *irradianceShader;
 Shader *convolutionShader;
 Shader *finalShader;
+Shader *debugShader;
 #pragma endregion
 
 #pragma region preDefine
@@ -174,6 +177,11 @@ GLuint convolutionStretchTempColourTex;
 // blur buffer
 GLuint blurFBO;
 GLuint tempColourTex;
+/*
+	Ã¿¸öÄ£ÐÍ¶ÔÓ¦µÄmaskÌùÍ¼
+*/
+GLuint seamMask;
+
 // bool variables
 bool firstFrame;
 bool firstFrame1;
@@ -200,7 +208,7 @@ int modelType = ModelType::Lungs1;
 unsigned int rouTexture;//--------------------------
 #pragma region light
 // light position¹âÕÕÎ»ÖÃ2.0099986f, 0.0f, 2.6999984fÓÒÇ°·½
-vec3 lightPos = vec3(2.0099986f, 2.0f, 2.6999984f);
+vec3 lightPos = vec3(2.0099986f, 0.0f, 2.6999984f);
 float lightRadius = 10.0f;
 // light target¹âÕÕÄ¿±ê·½ÏòÒÔ¼°ÑÕÉ«
 vec3 lightTarget = vec3(0.0f, 0.0f, 0.0f);
@@ -434,6 +442,7 @@ void preSetShaders() {
 	irradianceShader = new Shader("Shaders/irradianceVert.glsl", "Shaders/irradianceFrag.glsl");
 	convolutionShader = new Shader("Shaders/convolutionVert.glsl", "Shaders/convolutionFrag.glsl");
 	finalShader = new Shader("Shaders/finalVert.glsl", "Shaders/finalFrag.glsl");
+	debugShader = new Shader("Shaders/debugVert.glsl", "Shaders/debugFrag.glsl");
 
 #pragma endregion
 }
@@ -655,6 +664,7 @@ int main()
 	headMesh = new Model("resources/models/lungs/lungs1/lungs1.obj");//lungs1.obj
 	mucusMesh = new Model("resources/models/lungs/lungs1/lungs1_1.obj");//Õ³Òº¸²¸Ç lungs1_1.obj
 	
+	seamMask = loadTexture("resources/models/liver/liverMask.png");
 	//-----------------------------------------------------------------------------------
 	// draw in wireframe-------------------------------------------Ïß¿òÄ£Ê½
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -709,6 +719,7 @@ int main()
 			RenderScene();
 		}
 		else {
+			
 			TSMRenderScene();
 		}
 		
@@ -745,6 +756,8 @@ void RenderScene()//---------------------------------------------------ÕæÊµäÖÈ¾³
 
 	if (shadowDrawed) {
 		shadowPass();
+		//²âÊÔ
+		//debugPass();
 	}
 	unwrapMesh();
 	blurPass();
@@ -780,7 +793,10 @@ void TSMRenderScene()//---------------------------------------------------ÕæÊµäÖ
 
 	TSMPass();
 
-	//¾í»ý·øÕÕ¶ÈÌùÍ¼
+	//²âÊÔÒõÓ°ÌùÍ¼
+	//debugPassTsm();
+
+	////¾í»ý·øÕÕ¶ÈÌùÍ¼
 	irradianceMapPass();
 
 
@@ -851,6 +867,7 @@ void initImGUI() {
 		modelType = ModelType::Liver1;
 		headMesh=new Model("resources/models/liver/liver.obj");//liver.obj
 		mucusMesh=new Model("resources/models/liver/liver1.obj");//Õ³Òº¸²¸Ç liver1.obj
+		seamMask = loadTexture("resources/models/liver/liverMask.png");
 	}
 	else if (ImGui::RadioButton("Liver3", true)) {
 		modelType = ModelType::Liver3;
@@ -1407,7 +1424,8 @@ void shadowPass()
 	// matrices
 	//projMatrix = perspective(ZNEAR, ZFAR, 1.0f, FOV);//fov±íÊ¾ÊÓ³¡½Ç
 	//---------------------------NOT-----------------------------------------
-	projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);//----------not---------
+	projMatrix = glm::perspective(FOV, 1.0f, 0.1f, 100.0f);
+	//projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, 0.1f, 100.0f);//----------not---------
 	//viewMatrix = Matrix4::BuildViewMatrix(light->GetPosition(), lightTarget);//-----------------
 	viewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
 	modelMatrix = mat4(1.0f);
@@ -1440,14 +1458,20 @@ void TSMPass() {
 
 	// shader
 	SetCurrentShader(TSMShader);
-	projMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
-	viewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
+
+	//lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
+	lightProjMatrix = glm::perspective(FOV, 1.0f, zNear, zFar);
+	lightViewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
 	modelMatrix = mat4(1.0f);
-	shadowMatrix = biasMatrix * (projMatrix * viewMatrix);
+	//shadowMatrix = biasMatrix * (projMatrix * viewMatrix);
 
 	currentShader->setFloat("ZNear", zNear);
 	currentShader->setFloat("ZFar", zFar);
 	currentShader->setBool("isShadowVSM", true);
+
+	currentShader->setMat4("lightViewMatrix", lightViewMatrix);
+	currentShader->setMat4("lightProjMatrix", lightProjMatrix);
+
 	UpdateShaderMatrices();
 
 	// draw calls
@@ -1459,6 +1483,44 @@ void TSMPass() {
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
+}
+//ÓÃÓÚ²âÊÔÖ¡»º´æ
+void debugPass() {
+	glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	//glClearDepth(1.0f);
+	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	SetCurrentShader(debugShader);
+	currentShader->setFloat("ZNear", zNear);
+	currentShader->setFloat("ZFar", zFar);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "depthMap"), 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, shadowTex);
+	renderQuad();
+
+}
+//ÓÃÓÚ²âÊÔÖ¡»º´æ
+void debugPassTsm() {
+	glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	//glClearDepth(1.0f);
+	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	SetCurrentShader(debugShader);
+	currentShader->setFloat("ZNear", zNear);
+	currentShader->setFloat("ZFar", zFar);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "depthMap"), 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, TSMTex);
+	renderQuad();
+
 }
 void unwrapMesh()
 {
@@ -1552,7 +1614,8 @@ void irradianceMapPass() {
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, TSMTex);
 
-	lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
+	lightProjMatrix = glm::perspective(FOV, 1.0f, zNear, zFar);
+	//lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
 	lightViewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
 	currentShader->setMat4("lightViewMatrix", lightViewMatrix);
 	currentShader->setMat4("lightProjMatrix", lightProjMatrix);
@@ -1768,6 +1831,7 @@ void RenderFinalTSM()
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex4"), 8);
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex5"), 9);
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "blurredTex6"), 10);
+	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "seamMask"), 11);
 
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, TSMTex);
@@ -1788,11 +1852,16 @@ void RenderFinalTSM()
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, irradianceTex[5]);
 
+	glActiveTexture(GL_TEXTURE11);
+	glBindTexture(GL_TEXTURE_2D, seamMask);
+
 	// shader variables
 	currentShader->setVec3("cameraPos", vec3(0.0f, 0.0f, 3.0f));//------------not---------------
 	glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "useBlur"), useBlur);
 
-	lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
+
+	lightProjMatrix = glm::perspective(FOV, 1.0f, zNear, zFar);
+	//lightProjMatrix = glm::perspective(glm::radians(camera.Zoom), 1.0f, zNear, zFar);
 	lightViewMatrix = glm::lookAt(lightPos, lightTarget, vec3(0.0f, 1.0f, 0.0f));
 	currentShader->setMat4("LightView", lightViewMatrix);
 	currentShader->setMat4("LightProj", lightProjMatrix);
