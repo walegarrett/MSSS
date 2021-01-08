@@ -272,6 +272,7 @@ void main()
 	vec4 irrad5tap = texture( blurredTex5, oTex );
 	vec4 irrad6tap = texture( blurredTex6, oTex );
 	
+	
 	diffuseLight += gaussWeights1 * irrad1tap.xyz;
 	diffuseLight += gaussWeights2 * irrad2tap.xyz;
 	diffuseLight += gaussWeights3 * irrad3tap.xyz;

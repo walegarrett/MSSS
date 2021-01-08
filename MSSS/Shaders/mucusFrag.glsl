@@ -1,7 +1,7 @@
 #version 330 core
 
 uniform sampler2D texture_diffuse1;
-
+uniform sampler2D mucusNoTransTexture;
 in vec2 TexCoords;
 in vec3 normalDirection;
 in vec3 tangentDirection;
@@ -12,7 +12,14 @@ uniform vec3 lightColor;
 uniform vec3 camPos;
 out vec4 FragColor;
 
+uniform bool isMucusNoTransTexture;
 void main(void) {
+	vec4 colour = texture(texture_diffuse1, TexCoords);
+	
+	if(isMucusNoTransTexture){
+		colour = texture(mucusNoTransTexture, TexCoords);
+	}
+	
 	//材质的属性
 	float _AlphaX=0.2f;
 	float _AlphaY=0.2f;
@@ -34,7 +41,7 @@ void main(void) {
     
 	//环境光
 	//vec3 ambientLighting = vec3(gl_LightModel.ambient) * vec3(_Color);
-	vec3 ambientLighting= vec3(texture(texture_diffuse1, TexCoords));
+	vec3 ambientLighting= colour.rgb;
 	
 	//漫反射
     vec3 diffuseReflection = attenuation * vec3(lightColor) * vec3(_Color) * max(0.0, dotLN);
@@ -54,14 +61,17 @@ void main(void) {
 
         specularReflection = attenuation * vec3(_SpecColor) * sqrt(max(0.0, dotLN / dotVN)) * exp(-2.0 * (dotHTAlphaX * dotHTAlphaX + dotHBAlphaY * dotHBAlphaY) / (1.0 + dotHN));
     }
-	vec4 texColor = texture(texture_diffuse1, TexCoords);//采样的时候取alpha通道值，判断如若小于某个值就用透明的颜色来替代，否则使用光照模型的颜色
+	vec4 texColor = colour;//采样的时候取alpha通道值，判断如若小于某个值就用透明的颜色来替代，否则使用光照模型的颜色
 	
-	if(texColor.a < 0.2)//0.5
-       FragColor = texture(texture_diffuse1, TexCoords);
+	if(texColor.a < 0.4)//0.5
+       FragColor = colour;
 	else
-		FragColor = vec4(ambientLighting + diffuseReflection + specularReflection, 0.5);//0.5
+		FragColor = vec4(ambientLighting + diffuseReflection + specularReflection, 0.8);//0.5
    
 	
 	//不加光照等，需要光照的话将其注释
-    FragColor = texture(texture_diffuse1, TexCoords);
+	/*if(!isMucusNoTransTexture){
+		FragColor = colour;
+	}*/
+	FragColor = colour;
 }

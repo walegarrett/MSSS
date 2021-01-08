@@ -178,7 +178,6 @@ void main()
 	
 	//加上阴影---------阴影计算错误
 	lambert *= L0Shadow;
-	//lambert *=  Shadow(UV0, shadowTex, depth0 - SHADOW_BIAS);
 	//lambert *= 1.0f;
 
 

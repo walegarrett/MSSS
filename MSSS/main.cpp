@@ -202,10 +202,17 @@ float reflectivity = 0.158;
 bool isMouseMove = true;
 bool shadowDrawed = true;
 int modelType = ModelType::Lungs1;
+//纹理映射的方法
+int mappingType = 1;
+float map_r = 110.0;
+float map_z1 = 130.0;
+//黏液层纹理的选择
+bool isMucusNoTransTexture = false;
 #pragma endregion
 // load textures
 // -------------
 unsigned int rouTexture;//--------------------------
+unsigned int mucusNoTransTexture;//表示没有透明度的第一个黏液层纹理
 #pragma region light
 // light position光照位置2.0099986f, 0.0f, 2.6999984f右前方
 vec3 lightPos = vec3(2.0099986f, 0.0f, 2.6999984f);
@@ -665,6 +672,7 @@ int main()
 	mucusMesh = new Model("resources/models/lungs/lungs1/lungs1_1.obj");//粘液覆盖 lungs1_1.obj
 	
 	seamMask = loadTexture("resources/models/liver/liverMask.png");
+	mucusNoTransTexture = loadTexture("resources/texture/sss/head2.png");
 	//-----------------------------------------------------------------------------------
 	// draw in wireframe-------------------------------------------线框模式
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -835,8 +843,9 @@ void initImGUI() {
 	ImGui::Begin("Subsurface Scattering Demo");
 	//使用哪种渲染器
 	ImGui::Checkbox("Using TSMRenderer", &useTSMRender);
-	//控制散射
+	//是否使用次表面散射
 	ImGui::Checkbox("Subsurface Scattering", &subsurfaceScatteringEnabled);
+
 	ImGui::SliderFloat("Forward Scattering Mix", &forwardScatteringFactor, 0.00f, 1.00f);
 	ImGui::SliderFloat("Backward Scattering Mix", &backwardScatteringFactor, 0.00f, 1.00f);
 	//渲染黏液层
@@ -852,13 +861,15 @@ void initImGUI() {
 	//是否绘制半透明效果
 	ImGui::Checkbox("Translucent", &useTranslucent);
 
+	ImGui::Separator();
+
 	//模型的选择
 	if (ImGui::RadioButton("Lungs", true)) {
 		modelType = ModelType::Lungs1;
 		headMesh = new Model("resources/models/lungs/lungs1/lungs1.obj");//lungs1.obj
 		mucusMesh = new Model("resources/models/lungs/lungs1/lungs1_1.obj");//粘液覆盖 lungs1_1.obj
 	}
-	else if (ImGui::RadioButton("Lungs2", true)) {
+	else if (ImGui::RadioButton("Lungs2", true)) {//黏液层纹理使用的是原始坐标映射
 		modelType = ModelType::Lungs2;
 		headMesh = new Model("resources/models/lungs/lungs2/lungs2.obj");//
 		mucusMesh = new Model("resources/models/lungs/lungs2/lungs2_1.obj");//
@@ -879,17 +890,31 @@ void initImGUI() {
 		headMesh = new Model("resources/models/heart/heart.obj");//
 		mucusMesh = new Model("resources/models/heart/heart1.obj");//
 	}
-	else if (ImGui::RadioButton("Heart2", true)) {
+	else if (ImGui::RadioButton("Heart2", true)) {//使用黏液层纹理时使用的是球面-点云映射方法，r=3.0, z1=3.1
 		modelType = ModelType::Heart2;
 		headMesh = new Model("resources/models/hearts/heart2/heart4.obj");//heart2.obj
 		mucusMesh = new Model("resources/models/hearts/heart2/heart4_1.obj");//heart2_1.obj
 	}
-	else if (ImGui::RadioButton("Spleen", true)) {
+	else if (ImGui::RadioButton("Spleen", true)) {//黏液层的纹理映射方法设置为原始的映射
 		modelType = ModelType::Spleen;
 		headMesh = new Model("resources/models/spleen/spleen1/spleen4.obj");//
 		mucusMesh = new Model("resources/models/spleen/spleen1/spleen4_1.obj");//
 	}
 
+	ImGui::Separator();
+
+	//	纹理映射的方法
+	if (ImGui::RadioButton("Spherical mapping", true)) {
+		mappingType = 1;
+	}else if (ImGui::RadioButton("PointCloud mapping", true)) {
+		mappingType = 2;
+	}else if (ImGui::RadioButton("Original mapping", true)) {
+		mappingType = 3;
+	}
+	ImGui::SliderFloat("mapping_r", &map_r, 0.00f, 200.00f);
+	ImGui::SliderFloat("mapping_z1", &map_z1, 0.00f, 200.00f);
+
+	ImGui::Separator();
 	//导出渲染图片
 	if (ImGui::Button("save Rendering Result Image")) {
 		string fileName = "results/";
@@ -984,6 +1009,22 @@ void drawMucusLayer() {
 	currentShader->setVec3("lightPosition", lightPos);
 	glm::vec3 lightColor(3.0f, 3.0f, 3.0f);
 	currentShader->setVec3("lightColor", lightColor);//光照颜色
+
+	//设置纹理映射方式
+	currentShader->setInt("mappingType", mappingType);
+	currentShader->setFloat("r", map_r);
+	currentShader->setFloat("z1", map_z1);
+
+	//设置黏液层纹理
+	if (isMucusDrawed && !subsurfaceScatteringEnabled) {
+		glUniform1i(glGetUniformLocation(currentShader->GetProgram(), "mucusNoTransTexture"), 2);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, mucusNoTransTexture);
+		isMucusNoTransTexture = true;
+	}else {
+		isMucusNoTransTexture = false;
+	}
+	currentShader->setBool("isMucusNoTransTexture", isMucusNoTransTexture);
 
 	if (true) {//!shadowDrawed
 		projMatrix = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);//----------NOT-----------
