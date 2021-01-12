@@ -28,7 +28,7 @@ uniform bool isShadowVSM;
 
 uniform bool useBlur;
 uniform bool useTranslucent;
-
+uniform bool useTranslucentOnly;
 uniform float ZNear;
 uniform float ZFar;
 
@@ -184,7 +184,7 @@ vec3 transmittance(	float translucency,			// control the transmittance effect. R
 					float thickness             // 厚度
 					) {
 	// Calculate the scale of the effect:
-	float scale = 8.25 * (1.0 - translucency) / width;
+	float scale = 8.25 * (1.0 - translucency) / width;//8.25
 
 
 	float diff = scale * abs(thickness);
@@ -201,6 +201,7 @@ vec3 transmittance(	float translucency,			// control the transmittance effect. R
 					vec3(0.113, 0.007, 0.007) * exp(dd / 0.567) +
 					vec3(0.358, 0.004, 0.0)   * exp(dd / 1.99) +
 					vec3(0.078, 0.0,   0.0)   * exp(dd / 7.41);
+
 
 	//使用剖面近似从对象后面来的透射光
     // Using the profile, approximate the transmitted lighting from the back of the object:
@@ -290,6 +291,9 @@ void main()
 	// correct seam problems
 	//diffuseLight =  mix( diffuseLight, comparativeLocalLightColor, alterSeamMask); 
 
+	//半透明的颜色
+	vec3 transmittanceColor = vec3(0.0);
+
 	//是否渲染半透明效果
 	if(useTranslucent){
 		vec2 stretchTap = texture( StretchTex, oTex ).xy;
@@ -311,9 +315,9 @@ void main()
 		fades = exp( thickness_mm * thickness_mm * inv_a );
 		blend = textureScale *  texDist;
 
-		blendFactor3 = saturate(blend / ( a_values.y * 6.0) );  
-		blendFactor4 = saturate(blend / ( a_values.z * 6.0) );  
-		blendFactor5 = saturate(blend / ( a_values.w * 6.0) );  
+		blendFactor3 = saturate(blend / ( a_values.y * 6.0) );
+		blendFactor4 = saturate(blend / ( a_values.z * 6.0) );
+		blendFactor5 = saturate(blend / ( a_values.w * 6.0) );
 		
 		
 		
@@ -321,15 +325,16 @@ void main()
 		diffuseLight += gaussWeights5  * fades.z * blendFactor4 * texture( blurredTex5, TSMtap0.yz ).xyz / normConst; 
 		diffuseLight += gaussWeights6  * fades.w * blendFactor5 * texture( blurredTex6, TSMtap0.yz ).xyz / normConst;
 		
-
+		//if(length(thickness_mm) < 2000)
 		{
 
 			// Calculate some terms we will use later on:
 			vec3 f1 = lightColour.rgb * atten;
-			vec3 f2 = diffuse.rgb * f1;
+			vec3 f2 = diffuse.rgb * f1;//f1
 			//0.7   0.03
 			//diffuseLight += f2 * transmittance(0.7, 0.03, IN.normal, L0, length(fades));
-			diffuseLight += f2 * transmittance(0.7, 0.03, -IN.normal, L0, length(fades));
+			transmittanceColor = f2 * transmittance(0.9, 0.9, -IN.normal, L0, length(fades));
+			diffuseLight += transmittanceColor;
 		}
 	}
 
@@ -346,12 +351,14 @@ void main()
 	float specular = specularKSK(beckmannTex, normal, lightVector, viewVector, m);
 
 	//注意：这里我没有加上阴影，阴影部分计算有点问题
-	FragColor = vec4(diffuseLight + vec3(specular), 1.0 );  
-	//FragColor = vec4(diffuseLight * lambert + vec3(specular), 1.0);  
+	//FragColor = vec4(diffuseLight + vec3(specular), 1.0 ); 
+	FragColor = vec4(diffuseLight * lambert + vec3(specular), 1.0);  
 
 	if (!useBlur) {
 		//FragColor = diffuse + vec4(specular);//
 		FragColor = diffuse * lambert+ vec4(specular);
 		FragColor.a = 1.0f;
+	}else if (useTranslucentOnly){
+		FragColor = vec4(transmittanceColor, 1.0);
 	}
 }

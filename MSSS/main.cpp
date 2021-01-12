@@ -185,13 +185,14 @@ GLuint seamMask;
 // bool variables
 bool firstFrame;
 bool firstFrame1;
-bool useBlur;
+bool useBlur;//是否使用模糊
 bool useStretch;
-bool useTranslucent=true;
-bool useTSMRender = true;
+bool useTranslucent=true;//是否使用半透明阴影贴图
+bool useTranslucentOnly = false;//单独使用半透明
+bool useTSMRender = true;//渲染器的类型：带有半透明效果
 bool	init;	//Did the renderer initialise properly?
 bool isOriginal;
-bool isMucusDrawed=false;
+bool isMucusDrawed=false;//是否绘制黏液层
 //imGui相关参数
 bool subsurfaceScatteringEnabled = true;
 float forwardScatteringFactor = 0.4;
@@ -200,8 +201,8 @@ bool taaEnabled = true;
 float roughness = 0.85;
 float reflectivity = 0.158;
 bool isMouseMove = true;
-bool shadowDrawed = true;
-int modelType = ModelType::Lungs1;
+bool shadowDrawed = true;//是否显示阴影
+int modelType;//模型的种类
 //纹理映射的方法
 int mappingType = 1;
 float map_r = 110.0;
@@ -671,6 +672,8 @@ int main()
 	headMesh = new Model("resources/models/lungs/lungs1/lungs1.obj");//lungs1.obj
 	mucusMesh = new Model("resources/models/lungs/lungs1/lungs1_1.obj");//粘液覆盖 lungs1_1.obj
 	
+	modelType = ModelType::Lungs1;
+
 	seamMask = loadTexture("resources/models/liver/liverMask.png");
 	mucusNoTransTexture = loadTexture("resources/texture/sss/head2.png");
 	//-----------------------------------------------------------------------------------
@@ -841,6 +844,50 @@ void initImGUI() {
 
 	// gui window
 	ImGui::Begin("Subsurface Scattering Demo");
+	//导出渲染图片
+	if (ImGui::Button("save Rendering Result Image")) {
+		string fileName = "results/";
+		fileName += headMesh->getFileName();
+		fileName = fileName.substr(0, fileName.find_first_of('.'));
+		if (useTSMRender) {
+			fileName += "-tsm";
+		}
+		else fileName += "-noTsm";
+		if (subsurfaceScatteringEnabled) {
+			fileName += "-sss";
+		}
+		else fileName += "-original";
+		if (isMucusDrawed) {
+			fileName += "-mucus";
+		}
+		else fileName += "-noMucus";
+		if (useBlur) {
+			fileName += "-useBlur";
+		}
+		else fileName += "-noBlur";
+		if (useTranslucent) {
+			fileName += "-translucent";
+		}
+		else fileName += "-noTranslucent";
+		std::ostringstream ss;
+		ss << forwardScatteringFactor;
+		fileName += "-forward_";
+		fileName += ss.str(); ss.str("");
+		fileName += "-backward_";
+		ss << backwardScatteringFactor;
+		fileName += ss.str(); ss.str("");
+		ss << roughness;
+		fileName += "-roughness_";
+		fileName += ss.str(); ss.str("");
+		ss << reflectivity;
+		fileName += "-reflectivity_";
+		fileName += ss.str(); ss.str("");
+		fileName += ".png";
+		exportRenderingResultImage(fileName.c_str());
+	}
+
+	ImGui::Separator();
+
 	//使用哪种渲染器
 	ImGui::Checkbox("Using TSMRenderer", &useTSMRender);
 	//是否使用次表面散射
@@ -860,6 +907,8 @@ void initImGUI() {
 	ImGui::Checkbox("Shadow Map", &shadowDrawed);
 	//是否绘制半透明效果
 	ImGui::Checkbox("Translucent", &useTranslucent);
+	//是否单独绘制背光
+	ImGui::Checkbox("Translucent Only", &useTranslucentOnly);
 
 	ImGui::Separator();
 
@@ -915,42 +964,7 @@ void initImGUI() {
 	ImGui::SliderFloat("mapping_z1", &map_z1, 0.00f, 200.00f);
 
 	ImGui::Separator();
-	//导出渲染图片
-	if (ImGui::Button("save Rendering Result Image")) {
-		string fileName = "results/";
-		fileName += headMesh->getFileName();
-		fileName = fileName.substr(0, fileName.find_first_of('.'));
-		if (useTSMRender) {
-			fileName += "-tsm";
-		}else fileName += "-noTsm"; 
-		if (subsurfaceScatteringEnabled) {
-			fileName += "-sss";
-		}else fileName += "-original";
-		if (isMucusDrawed) {
-			fileName += "-mucus";
-		}else fileName += "-noMucus";
-		if (useBlur) {
-			fileName += "-useBlur";
-		}else fileName += "-noBlur";
-		if (useTranslucent) {
-			fileName += "-translucent";
-		}else fileName += "-noTranslucent";
-		std::ostringstream ss;
-		ss << forwardScatteringFactor;
-		fileName += "-forward_";
-		fileName += ss.str(); ss.str("");
-		fileName += "-backward_";
-		ss << backwardScatteringFactor;
-		fileName += ss.str(); ss.str("");
-		ss << roughness;
-		fileName += "-roughness_";
-		fileName += ss.str(); ss.str("");
-		ss << reflectivity;
-		fileName += "-reflectivity_";
-		fileName += ss.str(); ss.str("");
-		fileName += ".png";
-		exportRenderingResultImage(fileName.c_str());
-	}
+	
 	//修改物体的位置
 	
 
@@ -972,7 +986,7 @@ void drawImGUI() {
 void drawOriginalModel() {
 	//
 		//------------------------------------------------------original---------------------------------------------------
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//---------设置当前的着色器
@@ -1113,7 +1127,7 @@ void drawModel(Model* headMesh)
 	}
 	else if (modelType == ModelType::Heart2) {
 		modelMatrix = glm::mat4(1.0f);
-		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, 0.0f, 0.0f));//0.3 0.1
+		modelMatrix = glm::translate(modelMatrix, glm::vec3(0.3f, -0.1f, 0.0f));//0.3 0.1
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(0.05f, 0.05f, 0.05f));//0.003
 	}
 	
@@ -1335,7 +1349,7 @@ void computeBeckmannTex()
 {
 	glBindFramebuffer(GL_FRAMEBUFFER, beckmannFBO);
 	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//纯黑
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);//纯黑
 	glClear(GL_COLOR_BUFFER_BIT);
 	//shader
 	SetCurrentShader(beckmannShader);//--------------------not-----------------------
@@ -1356,7 +1370,7 @@ void computeStretchMap() {
 			// set up
 	glBindFramebuffer(GL_FRAMEBUFFER, stretchFBO);
 	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	// shader
 	SetCurrentShader(stretchShader);
@@ -1405,7 +1419,7 @@ void newStretchMapPass() {
 	glPushAttrib(GL_VIEWPORT_BIT);
 	glViewport(0, 0, MAP_SIZE, MAP_SIZE);
 
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	SetCurrentShader(newStretchShader);
@@ -1530,7 +1544,7 @@ void debugPass() {
 	glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	//glClearDepth(1.0f);
 	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1549,7 +1563,7 @@ void debugPassTsm() {
 	glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	//glClearDepth(1.0f);
 	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1569,7 +1583,7 @@ void unwrapMesh()
 		// set up
 	glBindFramebuffer(GL_FRAMEBUFFER, unwrapFBO);
 	glViewport(0.0f, 0.0f, MAP_SIZE, MAP_SIZE);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	// shader
@@ -1646,8 +1660,8 @@ void irradianceMapPass() {
 	//一开始将模型场景渲染到一张颜色纹理中
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, irradianceTex[0], 0);
 	
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	//绑定半透明阴影贴图纹理
@@ -1715,7 +1729,7 @@ void blurPass()
 	// set up
 	glBindFramebuffer(GL_FRAMEBUFFER, blurFBO);
 
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f//glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
 	glDisable(GL_DEPTH_TEST);
@@ -1850,7 +1864,7 @@ void mainPass()
 
 void RenderFinalTSM()
 {
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);//0.0f, 0.0f, 0.0f, 0.0f
 	glClearDepth(1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1911,6 +1925,7 @@ void RenderFinalTSM()
 	currentShader->setFloat("mix", forwardScatteringFactor);
 	currentShader->setBool("isShadowVSM", true);
 	currentShader->setBool("useTranslucent", useTranslucent);
+	currentShader->setBool("useTranslucentOnly", useTranslucentOnly);
 
 	currentShader->setFloat("mix", backwardScatteringFactor);
 	currentShader->setFloat("m", roughness);
