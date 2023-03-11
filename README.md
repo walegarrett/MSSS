@@ -1,5 +1,7 @@
 # Multi-space based subsurface scattering (MSSS)
-The implementation of the paper "**A new rendering algorithm based on multi-space for living soft tissue**" from https://www.sciencedirect.com/science/article/pii/S0097849321001187 written by C++  and OpenGL.
+The implementation of my paper "**[A new rendering algorithm based on multi-space for living soft tissue](https://www.sciencedirect.com/science/article/pii/S0097849321001187)**" published in "Computers & Graphics" in 2021. The implementation code is written by C++  and OpenGL.
+
+> Guo, Guanhui, Yanni Zou, and Peter X. Liu. "A new rendering algorithm based on multi-space for living soft tissue." *Computers & Graphics* 98 (2021): 242-254.(CCF-C, SCI-2)
 
 ##  Introduction
 
